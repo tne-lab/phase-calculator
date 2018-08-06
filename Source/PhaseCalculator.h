@@ -46,11 +46,12 @@ accuracy of phase-locked stimulation in real time.
 #include <DspLib/Dsp.h>  // Filtering
 #include <queue>
 #include "FFTWWrapper.h" // Fourier transform
+#include "ARModeler.h"   // Autoregressive modeling
 
 // parameter indices
 enum Param
 {
-    NUM_FUTURE,
+    PRED_LENGTH,
     RECALC_INTERVAL,
     AR_ORDER,
     LOWCUT,
@@ -96,8 +97,9 @@ public:
     bool enable() override;
     bool disable() override;
 
-    // calculate the fraction of the processing length is AR-predicted data points (i.e. numFuture / processLength)
-    float getRatioFuture();
+    // calculate the fraction of the processing length is AR-predicted data points
+    // (i.e. predictionLength / hilbertLength, as a float)
+    float getPredictionRatio();
 
     // thread code - recalculates AR parameters.
     void run() override;
@@ -122,11 +124,12 @@ private:
     void handleEvent(const EventChannel* eventInfo, const MidiMessage& event,
         int samplePosition = 0) override;
 
-    // Update processLength and numFuture, reallocating fields that depend on these.
-    void setProcessLength(int newProcessLength, int newNumFuture);
+    // Set hilbertLength and predictionLength, reallocating fields that depend on these.
+    void setHilbertAndPredLength(int newHilbertLength, int newPredictionLength);
 
-    // Update numFuture without reallocating processing arrays
-    void setNumFuture(int newNumFuture);
+    // Update historyLength to be the minimum possible size (depending on
+    // VIS_HILBERT_LENGTH, hilbertLength, predictionLength, and arOrder).
+    void updateHistoryLength();
 
     // Update the filters. From FilterNode code.
     void setFilterParameters();
@@ -169,14 +172,14 @@ private:
 
     // ---- customizable parameters ------
     
-    // number of samples to process each round
-    int processLength;
+    // number of samples to pass through the Hilbert transform in the main calculation
+    int hilbertLength;
 
-    // number of future values to predict (0 <= numFuture <= processLength - AR_ORDER)
-    int numFuture;
+    // number of future values to predict (0 <= predictionLength <= hilbertLength - AR_ORDER)
+    int predictionLength;
 
-    // size of sharedDataBuffer ( = max(VIS_HILBERT_LENGTH, processLength - numFuture))
-    int bufferLength;
+    // size of historyBuffer ( = max(VIS_HILBERT_LENGTH, hilbertLength - predictionLength))
+    int historyLength;
 
     // time to wait between AR model recalculations in ms
     int calcInterval;
@@ -194,47 +197,48 @@ private:
 
     // ---- internals -------
 
-    // Storage area for filtered data to be read by the thread to calculate AR model,
-    // and also copied to enter the phase calculation pipeline
-    AudioBuffer<double> sharedDataBuffer;
+    // Storage area for filtered data to be read by the main thread to fill hilbertBuffer,
+    // by the side thread to calculate AR model parameters, and by the visualization event
+    // handler to calculate acccurate phases at past event times.
+    AudioBuffer<double> historyBuffer;
 
-    // Everything else is an array with one entry per input.
-
-    // Keep track of how much of the sharedDataBuffer is empty (per channel)
+    // Keep track of how much of the historyBuffer is empty (per channel)
     Array<int> bufferFreeSpace;
 
     // Keeps track of each channel's state (see enum definition above)
     Array<ChannelState> chanState;
 
-    // Plans for the FFTW Fourier Transform library
-    OwnedArray<FFTWPlan> pForward;  // FFT
-    OwnedArray<FFTWPlan> pBackward; // IFFT
-
     // Buffers for FFTW processing
     OwnedArray<FFTWArray> hilbertBuffer;
+    
+    // Plans for the FFTW Fourier Transform library
+    OwnedArray<FFTWPlan> forwardPlan;  // FFT
+    OwnedArray<FFTWPlan> backwardPlan; // IFFT
 
-    // mutexes for sharedDataBuffer arrays, which must be used in the side thread to calculate AR parameters.
+    // mutexes for sharedDataBuffer arrays, which are used in the side thread to calculate AR parameters.
     // since the side thread only READS sharedDataBuffer, only needs to be locked in the main thread when it's WRITTEN to.
-    OwnedArray<CriticalSection> sdbLock;
+    OwnedArray<CriticalSection> historyLock;
 
-    // temporary storage for AR parameter calculation (see burg.cpp)
-    Array<double> per, pef, h, g;
+    // for autoregressive parameter calculation
+    ARModeler arModeler;
 
-    // keeps track of last output sample, to be used for smoothing.
+    // keeps track of each channel's last output sample, to be used for smoothing.
     Array<float> lastSample;
 
-    // AR parameters
+    // AR model parameters
     OwnedArray<Array<double>> arParams;
+    OwnedArray<CriticalSection> arParamLock;
 
     // so that the warning message only gets sent once per run
     bool haveSentWarning;
 
-    // maps full IDs of incoming streams to indices of corresponding subprocessors created here.
+    // maps full source subprocessor IDs of incoming streams to indices of
+    // corresponding subprocessors created here.
     HashMap<int, uint16> subProcessorMap;
 
     // delayed analysis for visualization
     FFTWArray visHilbertBuffer;
-    FFTWPlan  visPlanForward, visPlanBackward;
+    FFTWPlan  visForwardPlan, visBackwardPlan;
 
     // holds stimulation timestamps until the delayed phase is ready to be calculated
     std::queue<juce::int64> visTsBuffer;

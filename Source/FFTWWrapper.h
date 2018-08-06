@@ -64,8 +64,7 @@ public:
         }
     }
 
-    // access
-    std::complex<double> operator[](int i)
+    std::complex<double> getAsComplex(int i)
     {
         jassert(i >= 0 && i < length);
         return data[i];
@@ -77,12 +76,7 @@ public:
         return reinterpret_cast<double*>(data)[i];
     }
 
-    const std::complex<double>* getReadPointer(int index = 0)
-    {
-        return getWritePointer(index);
-    }
-
-    std::complex<double>* getWritePointer(int index = 0)
+    std::complex<double>* getComplexPointer(int index = 0)
     {
         if (index < length && index >= 0)
         {
@@ -142,7 +136,7 @@ public:
     int copyFrom(const std::complex<double>* fromArr, int num, int startInd = 0)
     {
         int numToCopy = jmin(num, length - startInd);
-        std::complex<double>* wp = getWritePointer(startInd);
+        std::complex<double>* wp = getComplexPointer(startInd);
         for (int i = 0; i < numToCopy; ++i)
         {
             wp[i] = fromArr[i];
@@ -177,7 +171,7 @@ public:
     FFTWPlan(int n, FFTWArray* in, FFTWArray* out, unsigned int flags)
     {
         double* ptr_in = in->getRealPointer();
-        fftw_complex* ptr_out = reinterpret_cast<fftw_complex*>(out->getWritePointer());
+        fftw_complex* ptr_out = reinterpret_cast<fftw_complex*>(out->getComplexPointer());
         plan = fftw_plan_dft_r2c_1d(n, ptr_in, ptr_out, flags);
     }
 
@@ -187,8 +181,8 @@ public:
     // c2c constructor
     FFTWPlan(int n, FFTWArray* in, FFTWArray* out, int sign, unsigned int flags)
     {
-        fftw_complex* ptr_in = reinterpret_cast<fftw_complex*>(in->getWritePointer());
-        fftw_complex* ptr_out = reinterpret_cast<fftw_complex*>(out->getWritePointer());
+        fftw_complex* ptr_in = reinterpret_cast<fftw_complex*>(in->getComplexPointer());
+        fftw_complex* ptr_out = reinterpret_cast<fftw_complex*>(out->getComplexPointer());
         plan = fftw_plan_dft_1d(n, ptr_in, ptr_out, sign, flags);
     }
 

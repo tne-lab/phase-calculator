@@ -43,7 +43,7 @@ public:
     double getRealMinValue();
 
 private:
-    // the actual minimum value that's allowed, although the slider "thinks" the min value is 0 so that the whole range from 0 to processLength is shown.
+    // the actual minimum value that's allowed, although the slider "thinks" the min value is 0 so that the whole range from 0 to hilbertLength is shown.
     double realMinValue;
 
     LookAndFeel_V3 myLookAndFeel;
@@ -100,15 +100,15 @@ private:
     ScopedPointer<Label>    highCutLabel;
     ScopedPointer<Label>    highCutEditable;
     
-    ScopedPointer<Label>    processLengthLabel;
-    ScopedPointer<Label>    processLengthUnitLabel;
-    ScopedPointer<ComboBox> processLengthBox;
+    ScopedPointer<Label>    hilbertLengthLabel;
+    ScopedPointer<Label>    hilbertLengthUnitLabel;
+    ScopedPointer<ComboBox> hilbertLengthBox;
 
-    ScopedPointer<ProcessBufferSlider> numFutureSlider;
-    ScopedPointer<Label>               numPastLabel;
-    ScopedPointer<Label>               numPastEditable;
-    ScopedPointer<Label>               numFutureLabel;
-    ScopedPointer<Label>               numFutureEditable;
+    ScopedPointer<ProcessBufferSlider> predLengthSlider;
+    ScopedPointer<Label>               pastLengthLabel;
+    ScopedPointer<Label>               pastLengthEditable;
+    ScopedPointer<Label>               predLengthLabel;
+    ScopedPointer<Label>               predLengthEditable;
 
     ScopedPointer<Label>    recalcIntervalLabel;
     ScopedPointer<Label>    recalcIntervalEditable;
@@ -121,8 +121,8 @@ private:
     ScopedPointer<ComboBox> outputModeBox;
 
     // constants
-    const String QUEUE_SIZE_TOOLTIP = "Change the total amount of data used to calculate the phase (powers of 2 are best)";
-    const String NUM_FUTURE_TOOLTIP = "Select how much actual (past) vs. predicted (future) data to use when calculating the phase";
+    const String HILB_LENGTH_TOOLTIP = "Change the total amount of data used to calculate the phase (powers of 2 are best)";
+    const String PRED_LENGTH_TOOLTIP = "Select how much past vs. predicted data to use when calculating the phase";
     const String RECALC_INTERVAL_TOOLTIP = "Time to wait between calls to update the autoregressive models";
     const String AR_ORDER_TOOLTIP = "Order of the autoregressive models used to predict future data";
     const String OUTPUT_MODE_TOOLTIP = "Which component of the analytic signal to output. If 'PH+MAG' is selected, " +
