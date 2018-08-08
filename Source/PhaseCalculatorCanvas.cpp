@@ -181,26 +181,40 @@ void PhaseCalculatorCanvas::update()
     // update continuous channel ComboBox to include only active inputs
     Array<int> activeChans = processor->getEditor()->getActiveChannels();
     int numInputs = processor->getNumInputs();
+    int numActive = activeChans.size();
+    int numItems = cChannelBox->getNumItems();
     int currSelectedId = cChannelBox->getSelectedId();
 
-    cChannelBox->clear(dontSendNotification);
-    for (int chan : activeChans)
+    // check whether box needs to be cleared - iterate through existing items and check for correctness
+    int startInd = numItems;
+    for (int i = 0; i < numItems; ++i)
     {
-        int id = chan + 1;
-        if (chan < numInputs)
+        if (i >= numActive ||                              // more items than active channels
+            activeChans[i] != cChannelBox->getItemId(i) || // this item doesn't match what it should be
+            activeChans[i] >= numInputs)                   // this item is not an input
         {
-            cChannelBox->addItem(String(id), id);
-            if (id == currSelectedId)
-            {
-                cChannelBox->setSelectedId(id, sendNotificationAsync);
-            }
+            startInd = 0;
+            cChannelBox->clear(sendNotificationSync);
+        }
+    }
+ 
+    for (int activeChan = startInd; activeChan < numActive; ++activeChan)
+    {
+        int chan = activeChans[activeChan];
+        if (chan >= numInputs) { break; }
+
+        int id = chan + 1;
+        cChannelBox->addItem(String(id), id);
+        if (id == currSelectedId)
+        {
+            cChannelBox->setSelectedId(id, sendNotificationSync);
         }
     }
 
     if (cChannelBox->getNumItems() > 0 && cChannelBox->getSelectedId() == 0)
     {
         int firstChannelId = activeChans[0] + 1;
-        cChannelBox->setSelectedId(firstChannelId, sendNotificationAsync);
+        cChannelBox->setSelectedId(firstChannelId, sendNotificationSync);
     }
 }
 
@@ -312,6 +326,17 @@ void PhaseCalculatorCanvas::loadVisualizerParameters(XmlElement* xml)
         numBinsSlider->setValue(xmlNode->getDoubleAttribute("numBins", numBinsSlider->getValue()), sendNotificationSync);
         referenceEditable->setText(xmlNode->getStringAttribute("phaseRef", referenceEditable->getText()), sendNotificationSync);
     }
+}
+
+void PhaseCalculatorCanvas::setContinuousChannel(int chan)
+{
+    if (cChannelBox->indexOfItemId(chan) == -1)
+    {
+        jassertfalse;
+        return;
+    }
+    // remember to switch to 1-based
+    cChannelBox->setSelectedId(chan + 1, sendNotificationSync);
 }
 
 /**** RosePlot ****/

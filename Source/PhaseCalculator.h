@@ -116,6 +116,10 @@ public:
     // for the visualizer
     std::queue<double>& getVisPhaseBuffer(ScopedPointer<ScopedLock>& lock);
 
+    // for visualizer continuous channel
+    void saveCustomChannelParametersToXml(XmlElement* channelElement, int channelNumber, InfoObjectCommon::InfoObjectType channelType) override;
+    void loadCustomChannelParametersFromXml(XmlElement* channelElement, InfoObjectCommon::InfoObjectType channelType) override;
+
 private:
 
     // ---- methods ----
@@ -131,7 +135,10 @@ private:
     // VIS_HILBERT_LENGTH, hilbertLength, predictionLength, and arOrder).
     void updateHistoryLength();
 
-    // Update the filters. From FilterNode code.
+    // Update minimum Nyquist frequency of active channels based on sample rates
+    void updateMinNyquist();
+
+    // Update the filters of active channels. From FilterNode code.
     void setFilterParameters();
 
     // Do glitch unwrapping
@@ -189,6 +196,10 @@ private:
 
     OutputMode outputMode;
 
+    // filter passband
+    double highCut;
+    double lowCut;
+
     // event channel to watch for phases to plot on the canvas (-1 = none)
     int visEventChannel;
 
@@ -236,6 +247,10 @@ private:
     // corresponding subprocessors created here.
     HashMap<int, uint16> subProcessorMap;
 
+    // for filtering - min Nyquist frequency over active channels
+    // (upper limit for highCut)
+    float minNyquist;
+
     // delayed analysis for visualization
     FFTWArray visHilbertBuffer;
     FFTWPlan  visForwardPlan, visBackwardPlan;
@@ -246,10 +261,6 @@ private:
     // for phases of stimulations, to be read by the visualizer.
     std::queue<double> visPhaseBuffer;
     CriticalSection visPhaseBufferLock;  // avoid race conditions when updating visualizer
-
-    // ------ filtering --------
-    double highCut;
-    double lowCut;
 
     // filter design copied from FilterNode
     typedef Dsp::SmoothedFilterDesign

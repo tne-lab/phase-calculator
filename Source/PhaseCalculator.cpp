@@ -32,11 +32,12 @@ PhaseCalculator::PhaseCalculator()
     , historyLength         (VIS_HILBERT_LENGTH)
     , lowCut                (4.0)
     , highCut               (8.0)
+    , minNyquist            (FLT_MAX)
     , haveSentWarning       (false)
     , outputMode            (PH)
     , arModeler             (arOrder, historyLength)
     , visEventChannel       (-1)
-    , visContinuousChannel  (0)
+    , visContinuousChannel  (-1)
     , visHilbertBuffer      (VIS_HILBERT_LENGTH)
     , visForwardPlan        (VIS_HILBERT_LENGTH, &visHilbertBuffer, FFTW_MEASURE)
     , visBackwardPlan       (VIS_HILBERT_LENGTH, &visHilbertBuffer, FFTW_BACKWARD, FFTW_MEASURE)
@@ -121,21 +122,24 @@ void PhaseCalculator::setParameter(int parameterIndex, float newValue)
     case VIS_C_CHAN:
     {
         int newVisContChan = static_cast<int>(newValue);
-        jassert(newVisContChan >= 0 && newVisContChan < filters.size());
-        int tempVisEventChan = visEventChannel;
-        visEventChannel = -1; // disable temporarily
+        jassert(newVisContChan < filters.size());
 
-        // clear timestamp queue
-        while (!visTsBuffer.empty())
+        if (newVisContChan >= 0)
         {
-            visTsBuffer.pop();
+            int tempVisEventChan = visEventChannel;
+            visEventChannel = -1; // disable temporarily
+
+            // clear timestamp queue
+            while (!visTsBuffer.empty())
+            {
+                visTsBuffer.pop();
+            }
+
+            // update filter settings
+            visReverseFilter.setParams(filters[newVisContChan]->getParams());
+            visEventChannel = tempVisEventChan;
         }
-
-        // update filter settings
-        visReverseFilter.setParams(filters[newVisContChan]->getParams());
-
         visContinuousChannel = newVisContChan;
-        visEventChannel = tempVisEventChan;
         break;
     }        
     }
@@ -510,7 +514,8 @@ void PhaseCalculator::updateSettings()
         arParams.removeLast(-numInputsChange);
         filters.removeLast(-numInputsChange);
     }
-    // call this no matter what, since the sample rate may have changed.
+    // call these no matter what, since the sample rates may have changed.
+    updateMinNyquist();
     setFilterParameters();
 
     // create new data channels if necessary
@@ -546,6 +551,26 @@ std::queue<double>& PhaseCalculator::getVisPhaseBuffer(ScopedPointer<ScopedLock>
 {
     lock = new ScopedLock(visPhaseBufferLock);
     return visPhaseBuffer;
+}
+
+void PhaseCalculator::saveCustomChannelParametersToXml(XmlElement* channelElement,
+    int channelNumber, InfoObjectCommon::InfoObjectType channelType)
+{
+    if (channelType == InfoObjectCommon::DATA_CHANNEL && channelNumber == visContinuousChannel)
+    {
+        channelElement->setAttribute("visualize", 1);
+    }
+}
+
+void PhaseCalculator::loadCustomChannelParametersFromXml(XmlElement* channelElement,
+    InfoObjectCommon::InfoObjectType channelType)
+{
+    if (channelElement->hasAttribute("visualize"))
+    {
+        // Set the visualization channel through the canvas. Should be added to the dropdown at this point.
+        int chan = channelElement->getIntAttribute("number");
+        static_cast<PhaseCalculatorEditor*>(getEditor())->setVisContinuousChan(chan);
+    }
 }
 
 // ------------ PRIVATE METHODS ---------------
@@ -615,13 +640,42 @@ void PhaseCalculator::updateHistoryLength()
     }
 }
 
-// from FilterNode code
+void PhaseCalculator::updateMinNyquist()
+{
+    float currMinNyquist = FLT_MAX;
+
+    auto ed = static_cast<PhaseCalculatorEditor*>(getEditor());
+    int nInputs = getNumInputs();
+    Array<int> activeChannels = ed->getActiveChannels();
+    for (int chan : activeChannels)
+    {
+        if (chan < nInputs) 
+        {
+            float sampleRate = getDataChannel(chan)->getSampleRate();
+            currMinNyquist = jmin(currMinNyquist, sampleRate / 2);
+        }
+    }
+
+    minNyquist = currMinNyquist;
+    if (highCut > minNyquist)
+    {
+        // push down highCut to make it valid
+        CoreServices::sendStatusMessage("Lowering Phase Calculator upper passband limit to the Nyquist frequency (" +
+            String(minNyquist) + " Hz)");
+        ed->setHighCut(minNyquist);
+    }
+}
+
 void PhaseCalculator::setFilterParameters()
 {
-    int nChan = getNumInputs();
-    for (int chan = 0; chan < nChan; chan++)
+    int nInputs = getNumInputs();
+    Array<int> activeChannels = getEditor()->getActiveChannels();
+    for (int chan : activeChannels)
     {
+        if (chan >= nInputs) { continue; }
+
         jassert(chan < filters.size());
+        jassert(lowCut >= 0 && lowCut < highCut);
 
         Dsp::Params params;
         params[0] = getDataChannel(chan)->getSampleRate();  // sample rate
@@ -633,7 +687,7 @@ void PhaseCalculator::setFilterParameters()
     }
 
     // copy filter parameters for corresponding channel to visReverseFilter
-    if (visContinuousChannel >= 0 && visContinuousChannel < nChan)
+    if (visContinuousChannel >= 0 && visContinuousChannel < nInputs)
     {
         visReverseFilter.setParams(filters[visContinuousChannel]->getParams());
     }

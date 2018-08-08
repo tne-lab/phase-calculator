@@ -162,12 +162,12 @@ public:
     void saveVisualizerParameters(XmlElement* xml) override;
     void loadVisualizerParameters(XmlElement* xml) override;
 
+    // setter for editor - handles loading continuous channel from XML (indirectly)
+    void setContinuousChannel(int chan);
+
 private:
     int getRosePlotDiameter(int height, int* verticalPadding);
     int getContentWidth(int width, int diameter, int* leftPadding);
-
-    // if false, we're not reading phases.
-    bool eventChannelSelected;
 
     PhaseCalculator* processor;
 

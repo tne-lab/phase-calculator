@@ -82,6 +82,10 @@ public:
     void saveCustomParameters(XmlElement* xml) override;
     void loadCustomParameters(XmlElement* xml) override;
 
+    // setters for processor
+    void setHighCut(float newHighCut);
+    void setVisContinuousChan(int chan);
+
 private:
 
     /* Utilities for parsing entered values
@@ -121,6 +125,12 @@ private:
     ScopedPointer<ComboBox> outputModeBox;
 
     // constants
+
+    // default passband width if pushing lowCut down or highCut up to fix invalid range,
+    // and also the minimum for lowCut.
+    // (meant to be larger than actual minimum floating-point eps)
+    static const float PASSBAND_EPS;
+
     const String HILB_LENGTH_TOOLTIP = "Change the total amount of data used to calculate the phase (powers of 2 are best)";
     const String PRED_LENGTH_TOOLTIP = "Select how much past vs. predicted data to use when calculating the phase";
     const String RECALC_INTERVAL_TOOLTIP = "Time to wait between calls to update the autoregressive models";
