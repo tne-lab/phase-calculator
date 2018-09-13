@@ -28,27 +28,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "PhaseCalculator.h"
 
-
-// modified slider type
-class ProcessBufferSlider : public Slider
-{
-public:
-    ProcessBufferSlider(const String& componentName);
-    ~ProcessBufferSlider();
-    double snapValue(double attemptedValue, DragMode dragMode) override;
-
-    // update the range / position of the slider based on current settings of the PhaseCalculator
-    void updateFromProcessor(PhaseCalculator* parentNode);
-
-    double getRealMinValue();
-
-private:
-    // the actual minimum value that's allowed, although the slider "thinks" the min value is 0 so that the whole range from 0 to hilbertLength is shown.
-    double realMinValue;
-
-    LookAndFeel_V3 myLookAndFeel;
-};
-
 class PhaseCalculatorEditor
     : public VisualizerEditor
     , public ComboBox::Listener
@@ -77,27 +56,31 @@ public:
 
     Visualizer* createNewCanvas() override;
 
-    void updateSettings() override;
-
     void saveCustomParameters(XmlElement* xml) override;
     void loadCustomParameters(XmlElement* xml) override;
 
-    // setters for processor
-    void setHighCut(float newHighCut);
-    void setVisContinuousChan(int chan);
+    // display updaters - do not trigger listeners.
+    void refreshLowCut();
+    void refreshHighCut();
+    void refreshPredLength();
+    void refreshHilbertLength();
+    void refreshVisContinuousChan();
 
 private:
 
     /* Utilities for parsing entered values
     *  Ouput whether the label contained a valid input; if so, it is stored in *out
-    *  and the label is updated with the parsed input. Otherwise, the label is reset
+    *  and the control is updated with the parsed input. Otherwise, the control is reset
     *  to defaultValue.
     */
 
-    static bool updateIntLabel(Label* label, int min, int max,
-        int defaultValue, int* out);
-    static bool updateFloatLabel(Label* label, float min, float max,
-        float defaultValue, float* out);
+    template<typename Ctrl>
+    static bool updateIntControl(Ctrl* c, const int min, const int max,
+        const int defaultValue, int* out);
+
+    template<typename Ctrl>
+    static bool updateFloatControl(Ctrl* c, const float min, const float max,
+        const float defaultValue, float* out);
 
     ScopedPointer<Label>    lowCutLabel;
     ScopedPointer<Label>    lowCutEditable;
@@ -108,11 +91,12 @@ private:
     ScopedPointer<Label>    hilbertLengthUnitLabel;
     ScopedPointer<ComboBox> hilbertLengthBox;
 
-    ScopedPointer<ProcessBufferSlider> predLengthSlider;
-    ScopedPointer<Label>               pastLengthLabel;
-    ScopedPointer<Label>               pastLengthEditable;
-    ScopedPointer<Label>               predLengthLabel;
-    ScopedPointer<Label>               predLengthEditable;
+    LookAndFeel_V3        v3LookAndFeel;
+    ScopedPointer<Slider> predLengthSlider;
+    ScopedPointer<Label>  pastLengthLabel;
+    ScopedPointer<Label>  pastLengthEditable;
+    ScopedPointer<Label>  predLengthLabel;
+    ScopedPointer<Label>  predLengthEditable;
 
     ScopedPointer<Label>    recalcIntervalLabel;
     ScopedPointer<Label>    recalcIntervalEditable;
@@ -125,11 +109,6 @@ private:
     ScopedPointer<ComboBox> outputModeBox;
 
     // constants
-
-    // default passband width if pushing lowCut down or highCut up to fix invalid range,
-    // and also the minimum for lowCut.
-    // (meant to be larger than actual minimum floating-point eps)
-    static const float PASSBAND_EPS;
 
     const String HILB_LENGTH_TOOLTIP = "Change the total amount of data used to calculate the phase (powers of 2 are best)";
     const String PRED_LENGTH_TOOLTIP = "Select how much past vs. predicted data to use when calculating the phase";

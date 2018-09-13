@@ -24,44 +24,31 @@
 
 class ARModeler {
 public:
-    ARModeler() = delete;
-    ARModeler(int order, int length, bool* success = nullptr) : arOrder(order), inputLength(length)
+    ARModeler() : arOrder(1), inputLength(2)
     {
-        if (order < 1 || order >= length)
-        {
-            // invalid length/order combination
-            jassertfalse;
-            if (success != nullptr) { *success = false; }
-            arOrder = 1;
-            inputLength = 2;
-        }
-        else if (success != nullptr) { *success = true; }
         reallocateStorage();
+    }
+
+    ARModeler(int order, int length, bool* success = nullptr) : ARModeler()
+    {
+        bool s = setParams(order, length);
+        if (success != nullptr)
+        {
+            *success = s;
+        }
     }
 
     ~ARModeler() { }
 
     // returns true if successful.
-    bool setOrder(int order)
+    bool setParams(int order, int length)
     {
-        if (order < 1 || order >= inputLength)
+        if (order < 1 || order >= length)
         {
             jassertfalse;
             return false;
         }
         arOrder = order;
-        reallocateStorage();
-        return true;
-    }
-
-    // returns true if successful.
-    bool setInputLength(int length)
-    {
-        if (length <= arOrder)
-        {
-            jassertfalse;
-            return false;
-        }
         inputLength = length;
         reallocateStorage();
         return true;
@@ -132,6 +119,8 @@ private:
     Array<double> per;
     Array<double> pef;
     Array<double> h;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ARModeler);
 };
 
 #endif AR_MODELER_H_INCLUDED

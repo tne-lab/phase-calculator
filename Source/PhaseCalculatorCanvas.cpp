@@ -179,9 +179,8 @@ void PhaseCalculatorCanvas::refreshState() {}
 void PhaseCalculatorCanvas::update() 
 {
     // update continuous channel ComboBox to include only active inputs
-    Array<int> activeChans = processor->getEditor()->getActiveChannels();
-    int numInputs = processor->getNumInputs();
-    int numActive = activeChans.size();
+    Array<int> activeInputs = processor->getActiveInputs();
+    int numActiveInputs = activeInputs.size();
     int numItems = cChannelBox->getNumItems();
     int currSelectedId = cChannelBox->getSelectedId();
 
@@ -189,32 +188,38 @@ void PhaseCalculatorCanvas::update()
     int startInd = numItems;
     for (int i = 0; i < numItems; ++i)
     {
-        if (i >= numActive ||                              // more items than active channels
-            activeChans[i] != cChannelBox->getItemId(i) || // this item doesn't match what it should be
-            activeChans[i] >= numInputs)                   // this item is not an input
+        if (i >= numActiveInputs ||                           // more items than active inputs
+            cChannelBox->getItemId(i) - 1 != activeInputs[i]) // this item doesn't match what it should be
         {
             startInd = 0;
-            cChannelBox->clear(sendNotificationSync);
+            cChannelBox->clear(dontSendNotification);
         }
     }
  
-    for (int activeChan = startInd; activeChan < numActive; ++activeChan)
+    for (int activeChan = startInd; activeChan < numActiveInputs; ++activeChan)
     {
-        int chan = activeChans[activeChan];
-        if (chan >= numInputs) { break; }
+        int chan = activeInputs[activeChan];
 
         int id = chan + 1;
         cChannelBox->addItem(String(id), id);
         if (id == currSelectedId)
         {
-            cChannelBox->setSelectedId(id, sendNotificationSync);
+            cChannelBox->setSelectedId(id, dontSendNotification);
         }
     }
 
     if (cChannelBox->getNumItems() > 0 && cChannelBox->getSelectedId() == 0)
     {
-        int firstChannelId = activeChans[0] + 1;
-        cChannelBox->setSelectedId(firstChannelId, sendNotificationSync);
+        int firstChannelId = activeInputs[0] + 1;
+        cChannelBox->setSelectedId(firstChannelId, dontSendNotification);
+    }
+
+    // if channel changed, notify processor of update
+    // subtract 1 to change from 1-based to 0-based
+    int newId = cChannelBox->getSelectedId();
+    if (newId != currSelectedId)
+    {
+        processor->setParameter(VIS_C_CHAN, static_cast<float>(newId - 1));
     }
 }
 
@@ -239,11 +244,38 @@ void PhaseCalculatorCanvas::refresh()
 
 void PhaseCalculatorCanvas::beginAnimation() 
 {
+    // disable continuous channel options from a different subprocessor
+    // this is necessary to maintain the correct source subprocessor metadata on the
+    // visualized phase event channel, to avoid problems with the LFP viewer.
+    // (shouldn't cause issues unless the setup is pretty weird)
+    int selectedId = cChannelBox->getSelectedId();
+    if (selectedId > 0)
+    {
+        int currSourceSubproc = processor->getFullSourceId(selectedId - 1);
+
+        int numItems = cChannelBox->getNumItems();
+        for (int i = 0; i < numItems; ++i)
+        {
+            int id = cChannelBox->getItemId(i);
+            if (id != selectedId && processor->getFullSourceId(id - 1) != currSourceSubproc)
+            {
+                cChannelBox->setItemEnabled(id, false);
+            }
+        }
+    }
+
     startCallbacks();
 }
 
 void PhaseCalculatorCanvas::endAnimation()
 {
+    // re-enable all continuous channel options
+    int numItems = cChannelBox->getNumItems();
+    for (int i = 0; i < numItems; ++i)
+    {
+        cChannelBox->setItemEnabled(cChannelBox->getItemId(i), true);
+    }
+
     stopCallbacks();
 }
 
@@ -328,15 +360,15 @@ void PhaseCalculatorCanvas::loadVisualizerParameters(XmlElement* xml)
     }
 }
 
-void PhaseCalculatorCanvas::setContinuousChannel(int chan)
+void PhaseCalculatorCanvas::displayContinuousChan(int chan)
 {
-    if (cChannelBox->indexOfItemId(chan) == -1)
+    if (cChannelBox->indexOfItemId(chan + 1) == -1)
     {
         jassertfalse;
         return;
     }
     // remember to switch to 1-based
-    cChannelBox->setSelectedId(chan + 1, sendNotificationSync);
+    cChannelBox->setSelectedId(chan + 1, dontSendNotification);
 }
 
 /**** RosePlot ****/
@@ -512,7 +544,7 @@ void RosePlot::labelTextChanged(Label* labelThatHasChanged)
     {
         float floatInput;
         float currReferenceDeg = static_cast<float>(referenceAngle * 180.0 / PI);
-        bool valid = PhaseCalculatorEditor::updateFloatLabel(labelThatHasChanged,
+        bool valid = PhaseCalculatorEditor::updateFloatControl(labelThatHasChanged,
             -FLT_MAX, FLT_MAX, currReferenceDeg, &floatInput);
 
         if (valid)

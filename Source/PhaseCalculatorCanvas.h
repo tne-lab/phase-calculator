@@ -162,8 +162,8 @@ public:
     void saveVisualizerParameters(XmlElement* xml) override;
     void loadVisualizerParameters(XmlElement* xml) override;
 
-    // setter for editor - handles loading continuous channel from XML (indirectly)
-    void setContinuousChannel(int chan);
+    // display updaters - do not trigger listeners.
+    void displayContinuousChan(int chan);
 
 private:
     int getRosePlotDiameter(int height, int* verticalPadding);

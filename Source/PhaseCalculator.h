@@ -51,6 +51,8 @@ accuracy of phase-locked stimulation in real time.
 // parameter indices
 enum Param
 {
+    HILBERT_LENGTH,
+    PAST_LENGTH,
     PRED_LENGTH,
     RECALC_INTERVAL,
     AR_ORDER,
@@ -80,7 +82,6 @@ enum OutputMode { PH = 1, MAG, PH_AND_MAG, IM };
 class PhaseCalculator : public GenericProcessor, public Thread
 {
     friend class PhaseCalculatorEditor;
-    friend class ProcessBufferSlider;
 public:
 
     PhaseCalculator();
@@ -90,6 +91,8 @@ public:
 
     AudioProcessorEditor* createEditor() override;
 
+    void createEventChannels() override;
+
     void setParameter(int parameterIndex, float newValue) override;
 
     void process(AudioSampleBuffer& buffer) override;
@@ -97,21 +100,23 @@ public:
     bool enable() override;
     bool disable() override;
 
-    // calculate the fraction of the processing length is AR-predicted data points
-    // (i.e. predictionLength / hilbertLength, as a float)
-    float getPredictionRatio();
-
     // thread code - recalculates AR parameters.
     void run() override;
 
     // handle changing number of channels
     void updateSettings() override;
 
+    // Returns array of active channels that only includes inputs (not extra outputs)
+    Array<int> getActiveInputs();
+
     // ----- to create new channels for multiple outputs -------
     bool isGeneratesTimestamps() const override;
     int getNumSubProcessors() const override;
     float getSampleRate(int subProcessorIdx = 0) const override;
     float getBitVolts(int subProcessorIdx = 0) const override;
+
+    // miscellaneous helper
+    int getFullSourceId(int chan);
 
     // for the visualizer
     std::queue<double>& getVisPhaseBuffer(ScopedPointer<ScopedLock>& lock);
@@ -128,8 +133,23 @@ private:
     void handleEvent(const EventChannel* eventInfo, const MidiMessage& event,
         int samplePosition = 0) override;
 
-    // Set hilbertLength and predictionLength, reallocating fields that depend on these.
-    void setHilbertAndPredLength(int newHilbertLength, int newPredictionLength);
+    // Sets hilbertLength (which in turn influences predLength and historyLength)
+    void setHilbertLength(int newHilbertLength);
+
+    // Sets predLength (which in turn influences historyLength)
+    void setPredLength(int newPredLength);
+
+    // Sets arOrder (which in turn influences historyLength and the arModeler)
+    void setAROrder(int newOrder);
+
+    // Sets lowCut (which in turn influences highCut)
+    void setLowCut(float newLowCut);
+
+    // Sets highCut (which in turn influences lowCut)
+    void setHighCut(float newHighCut);
+
+    // Sets visContinuousChannel and updates the visualization filter
+    void setVisContChan(int newChan);
 
     // Update historyLength to be the minimum possible size (depending on
     // VIS_HILBERT_LENGTH, hilbertLength, predictionLength, and arOrder).
@@ -140,6 +160,9 @@ private:
 
     // Update the filters of active channels. From FilterNode code.
     void setFilterParameters();
+
+    // Allocate memory for a new active input channel
+    void addActiveChannel();
 
     // Do glitch unwrapping
     void unwrapBuffer(float* wp, int nSamples, int chan);
@@ -153,7 +176,15 @@ private:
     // Create an extra output channel for each processed input channel if PH_AND_MAG is selected
     void updateExtraChannels();
 
-    /* 
+    // Deselect given channel in the "PARAMS" channel selector. Useful to ensure "extra channels"
+    // remain deselected (so that they don't become active inputs if the # of inputs changes).
+    void deselectChannel(int chan);
+
+    // Calls deselectChannel on each channel that is not currently an input. Only relevant
+    // when the output mode is phase and magnitude.
+    void deselectAllExtraChannels();
+
+    /*
      * Check the visualization timestamp queue, clear any that are expired
      * (too late to calculate phase), and calculate phase of any that are ready.
      * sdbEndTs = timestamp 1 past end of current buffer
@@ -166,10 +197,11 @@ private:
      * arPredict: use autoregressive model of order to predict future data.
      * Input params is an array of coefficients of an AR model of length 'order'.
      * Writes writeNum future data values starting at location writeStart.
-     * *** assumes there are at least 'order' existing data points *before* writeStart
-     * to use to calculate future data points.
+     * *** assumes there are at least 'order' existing data points *before* readEnd
+     * to use to calculate first 'order' data points. readEnd can equal writeStart.
      */
-    static void arPredict(double* writeStart, int writeNum, const double* params, int order);
+    static void arPredict(const double* readEnd, double* writeStart, int writeNum,
+        const double* params, int order);
 
     /*
      * hilbertManip: Hilbert transforms data in the frequency domain (including normalization by length of data).
@@ -178,7 +210,7 @@ private:
     static void hilbertManip(FFTWArray* fftData);
 
     // ---- customizable parameters ------
-    
+
     // number of samples to pass through the Hilbert transform in the main calculation
     int hilbertLength;
 
@@ -208,6 +240,8 @@ private:
 
     // ---- internals -------
 
+    int numActiveChansAllocated = 0;
+
     // Storage area for filtered data to be read by the main thread to fill hilbertBuffer,
     // by the side thread to calculate AR model parameters, and by the visualization event
     // handler to calculate acccurate phases at past event times.
@@ -221,7 +255,7 @@ private:
 
     // Buffers for FFTW processing
     OwnedArray<FFTWArray> hilbertBuffer;
-    
+
     // Plans for the FFTW Fourier Transform library
     OwnedArray<FFTWPlan> forwardPlan;  // FFT
     OwnedArray<FFTWPlan> backwardPlan; // IFFT
@@ -262,6 +296,9 @@ private:
     std::queue<double> visPhaseBuffer;
     CriticalSection visPhaseBufferLock;  // avoid race conditions when updating visualizer
 
+    // event channel to send visualized phases over
+    EventChannel* visPhaseChannel;
+
     // filter design copied from FilterNode
     typedef Dsp::SmoothedFilterDesign
         <Dsp::Butterworth::Design::BandPass // design type
@@ -281,6 +318,11 @@ private:
 
     // -------static------------
 
+    // default passband width if pushing lowCut down or highCut up to fix invalid range,
+    // and also the minimum for lowCut.
+    // (meant to be larger than actual minimum floating-point eps)
+    static const float PASSBAND_EPS;
+
     // priority of the AR model calculating thread (0 = lowest, 10 = highest)
     static const int AR_PRIORITY = 3;
 
@@ -288,8 +330,8 @@ private:
     static const int GLITCH_LIMIT = 200;
 
     // process length limits (powers of 2)
-    static const int MIN_PLEN_POW = 9;
-    static const int MAX_PLEN_POW = 16;
+    static const int MIN_HILB_LEN_POW = 9;
+    static const int MAX_HILB_LEN_POW = 16;
 
     // process length for real-time visualization ground truth hilbert transform
     // based on evaluation of phase error compared to offline processing

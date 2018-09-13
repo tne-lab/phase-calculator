@@ -24,8 +24,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "PhaseCalculatorCanvas.h"
 #include <climits> // INT_MAX
 
-const float PhaseCalculatorEditor::PASSBAND_EPS = 0.01F;
-
 PhaseCalculatorEditor::PhaseCalculatorEditor(GenericProcessor* parentNode, bool useDefaultParameterEditors)
     : VisualizerEditor     (parentNode, 325, useDefaultParameterEditors)
 {
@@ -72,7 +70,7 @@ PhaseCalculatorEditor::PhaseCalculatorEditor(GenericProcessor* parentNode, bool 
 
     hilbertLengthBox = new ComboBox("Buffer size");
     hilbertLengthBox->setEditableText(true);
-    for (int pow = PhaseCalculator::MIN_PLEN_POW; pow <= PhaseCalculator::MAX_PLEN_POW; ++pow)
+    for (int pow = PhaseCalculator::MIN_HILB_LEN_POW; pow <= PhaseCalculator::MAX_HILB_LEN_POW; ++pow)
     {
         hilbertLengthBox->addItem(String(1 << pow), pow);
     }
@@ -105,27 +103,34 @@ PhaseCalculatorEditor::PhaseCalculatorEditor(GenericProcessor* parentNode, bool 
     pastLengthEditable = new Label("pastLengthE");
     pastLengthEditable->setEditable(true);
     pastLengthEditable->addListener(this);
+    pastLengthEditable->setText(String(processor->hilbertLength - processor->predictionLength), dontSendNotification);
     pastLengthEditable->setBounds(filterWidth + 8, 102, 60, 18);
     pastLengthEditable->setColour(Label::backgroundColourId, Colours::grey);
     pastLengthEditable->setColour(Label::textColourId, Colours::white);
+    addAndMakeVisible(pastLengthEditable);
 
     predLengthEditable = new Label("predLengthE");
     predLengthEditable->setEditable(true);
     predLengthEditable->addListener(this);
+    predLengthEditable->setText(String(processor->predictionLength), dontSendNotification);
     predLengthEditable->setBounds(filterWidth + 70, 102, 60, 18);
     predLengthEditable->setColour(Label::backgroundColourId, Colours::grey);
     predLengthEditable->setColour(Label::textColourId, Colours::white);
+    addAndMakeVisible(predLengthEditable);
 
-    predLengthSlider = new ProcessBufferSlider("predLength");
+    predLengthSlider = new Slider("predLength");
+    predLengthSlider->setLookAndFeel(&v3LookAndFeel);
+    predLengthSlider->setSliderStyle(Slider::LinearBar);
+    predLengthSlider->setTextBoxStyle(Slider::NoTextBox, false, 40, 20);
+    predLengthSlider->setScrollWheelEnabled(false);
     predLengthSlider->setBounds(filterWidth + 8, 70, 122, 10);
     predLengthSlider->setColour(Slider::thumbColourId, Colour(255, 187, 0));
     predLengthSlider->setColour(Slider::backgroundColourId, Colour(51, 102, 255));
     predLengthSlider->setTooltip(PRED_LENGTH_TOOLTIP);
     predLengthSlider->addListener(this);
-    predLengthSlider->updateFromProcessor(processor);
+    predLengthSlider->setRange(0, processor->hilbertLength, 1);
+    predLengthSlider->setValue(processor->hilbertLength - processor->predictionLength, dontSendNotification);
     addAndMakeVisible(predLengthSlider);
-    addAndMakeVisible(pastLengthEditable);
-    addAndMakeVisible(predLengthEditable);
 
     recalcIntervalLabel = new Label("recalcL", "AR Refresh:");
     recalcIntervalLabel->setBounds(filterWidth + 140, 25, 100, 20);
@@ -200,44 +205,13 @@ void PhaseCalculatorEditor::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
         {            
             newHilbertLength = (1 << newId);
         }
-        else
+        else if (!updateIntControl(comboBoxThatHasChanged, PhaseCalculator::MIN_HILB_LEN_POW,
+            PhaseCalculator::MAX_HILB_LEN_POW, processor->hilbertLength, &newHilbertLength))
         {
-            // try to parse input
-            String input = hilbertLengthBox->getText();
-            int parsedInt;
-            try
-            {
-                parsedInt = std::stoi(input.toRawUTF8());
-            }
-            catch (const std::logic_error&)
-            {
-                hilbertLengthBox->setText(String(processor->hilbertLength), dontSendNotification);
-                return;
-            }
-
-            newHilbertLength = jmax(1 << PhaseCalculator::MIN_PLEN_POW,
-                jmin(1 << PhaseCalculator::MAX_PLEN_POW, parsedInt));
-           
-            hilbertLengthBox->setText(String(newHilbertLength), dontSendNotification);
+            return;
         }
 
-        // update AR order if necessary
-        if (newHilbertLength < processor->arOrder)
-        {
-            arOrderEditable->setText(String(newHilbertLength), sendNotificationSync);
-            CoreServices::sendStatusMessage("AR order snapped to maximum value for this processing buffer length");
-        }
-
-        // calculate predLength
-        float currRatio = processor->getPredictionRatio();
-        float newPredLength;
-        newPredLength = jmin(static_cast<int>(roundf(currRatio * newHilbertLength)), newHilbertLength - processor->arOrder);
-
-        // change both at once
-        processor->setHilbertAndPredLength(newHilbertLength, newPredLength);
-
-        // update slider
-        predLengthSlider->updateFromProcessor(processor);
+        processor->setParameter(HILBERT_LENGTH, static_cast<float>(newHilbertLength));
     }
     else if (comboBoxThatHasChanged == outputModeBox)
     {
@@ -249,41 +223,34 @@ void PhaseCalculatorEditor::labelTextChanged(Label* labelThatHasChanged)
 {
     PhaseCalculator* processor = static_cast<PhaseCalculator*>(getProcessor());
 
-    int sliderMin = static_cast<int>(predLengthSlider->getRealMinValue());
     int sliderMax = static_cast<int>(predLengthSlider->getMaximum());
 
     if (labelThatHasChanged == pastLengthEditable)
     {
         int intInput;
-        bool valid = updateIntLabel(labelThatHasChanged, sliderMin, sliderMax,
-            static_cast<int>(predLengthSlider->getValue()), &intInput);
+        bool valid = updateIntControl(labelThatHasChanged, 0, processor->hilbertLength,
+            processor->hilbertLength - processor->predictionLength, &intInput);
 
         if (valid)
         {
-            int newPredLength = sliderMax - intInput;
-            predLengthSlider->setValue(intInput, dontSendNotification);
-            predLengthEditable->setText(String(newPredLength), dontSendNotification);
-            processor->setParameter(PRED_LENGTH, static_cast<float>(newPredLength));
+            processor->setParameter(PAST_LENGTH, static_cast<float>(intInput));
         }        
     }
     else if (labelThatHasChanged == predLengthEditable)
     {
         int intInput;
-        bool valid = updateIntLabel(labelThatHasChanged, 0, sliderMax - sliderMin,
-            sliderMax - static_cast<int>(predLengthSlider->getValue()), &intInput);
+        bool valid = updateIntControl(labelThatHasChanged, 0, processor->hilbertLength,
+            processor->predictionLength, &intInput);
         
         if (valid)
         {
-            int newPastLength = sliderMax - intInput;
-            predLengthSlider->setValue(newPastLength, dontSendNotification);
-            pastLengthEditable->setText(String(newPastLength), dontSendNotification);
             processor->setParameter(PRED_LENGTH, static_cast<float>(intInput));
         }
     }
     else if (labelThatHasChanged == recalcIntervalEditable)
     {
         int intInput;
-        bool valid = updateIntLabel(labelThatHasChanged, 0, INT_MAX, processor->calcInterval, &intInput);
+        bool valid = updateIntControl(labelThatHasChanged, 0, INT_MAX, processor->calcInterval, &intInput);
 
         if (valid)
         {
@@ -293,44 +260,34 @@ void PhaseCalculatorEditor::labelTextChanged(Label* labelThatHasChanged)
     else if (labelThatHasChanged == arOrderEditable)
     {
         int intInput;
-        bool valid = updateIntLabel(labelThatHasChanged, 1, processor->hilbertLength, processor->arOrder, &intInput);
+        bool valid = updateIntControl(labelThatHasChanged, 1, INT_MAX, processor->arOrder, &intInput);
 
         if (valid)
         {
             processor->setParameter(AR_ORDER, static_cast<float>(intInput));
-            // update slider's minimum value, and predictionLength and historyLength if necessary
-            predLengthSlider->updateFromProcessor(processor);
         }
     }
     else if (labelThatHasChanged == lowCutEditable)
     {
         float floatInput;
-        bool valid = updateFloatLabel(labelThatHasChanged, PASSBAND_EPS, processor->minNyquist - PASSBAND_EPS,
-            processor->lowCut, &floatInput);
+        bool valid = updateFloatControl(labelThatHasChanged, PhaseCalculator::PASSBAND_EPS,
+            processor->minNyquist - PhaseCalculator::PASSBAND_EPS, processor->lowCut, &floatInput);
 
-        if (!valid) { return; }
-        
-        if (floatInput > processor->highCut)
-        {   
-            // push highCut up
-            highCutEditable->setText(String(floatInput + PASSBAND_EPS), sendNotificationSync);
+        if (valid)
+        {
+            processor->setParameter(LOWCUT, floatInput);
         }
-        processor->setParameter(LOWCUT, floatInput);
     }
     else if (labelThatHasChanged == highCutEditable)
     {
         float floatInput;
-        bool valid = updateFloatLabel(labelThatHasChanged, 2 * PASSBAND_EPS, processor->minNyquist,
-            processor->highCut, &floatInput);
+        bool valid = updateFloatControl(labelThatHasChanged, 2 * PhaseCalculator::PASSBAND_EPS,
+            processor->minNyquist, processor->highCut, &floatInput);
 
-        if (!valid) { return; }
-
-        if (floatInput < processor->lowCut)
+        if (valid) 
         {
-            // push lowCut down
-            lowCutEditable->setText(String(floatInput - PASSBAND_EPS), sendNotificationSync);
+            processor->setParameter(HIGHCUT, floatInput);
         }
-        processor->setParameter(HIGHCUT, floatInput);
     }
 }
 
@@ -338,25 +295,43 @@ void PhaseCalculatorEditor::sliderEvent(Slider* slider)
 {
     if (slider == predLengthSlider)
     {
-        // At this point, a snapValue call has ensured that the new value is valid.
-        int newVal = static_cast<int>(slider->getValue());
-        int maxVal = static_cast<int>(slider->getMaximum());
-        pastLengthEditable->setText(String(newVal), dontSendNotification);
-        predLengthEditable->setText(String(maxVal - newVal), dontSendNotification);
-        
+        int newVal = slider->getValue();
+        int maxVal = slider->getMaximum();        
         getProcessor()->setParameter(PRED_LENGTH, static_cast<float>(maxVal - newVal));
     }
 }
 
 void PhaseCalculatorEditor::channelChanged(int chan, bool newState)
 {
-    // If not an output channel, update signal chain. This should take care of:
-    //     - adding/removing output channels if necessary
-    //     - updating the minimum Nyquist frequency of active channels (and highCut if necessary)
-    //     - updating the available continuous channels for visualizer
-    if (chan < getProcessor()->getNumInputs())
+    auto pc = static_cast<PhaseCalculator*>(getProcessor());    
+    if (chan < pc->getNumInputs())
     {
-        CoreServices::updateSignalChain(this);
+        if (newState)
+        {
+            int numActiveChans = pc->getActiveInputs().size();
+            if (numActiveChans > pc->numActiveChansAllocated)
+            {
+                pc->addActiveChannel();
+            }
+        }
+
+        if (pc->outputMode == PH_AND_MAG)
+        {
+            // Update signal chain to add/remove output channels if necessary
+            CoreServices::updateSignalChain(this);
+        }
+        else
+        {
+            // Can just do a partial update
+            pc->updateMinNyquist();     // minNyquist may have changed depending on active chans
+            pc->setFilterParameters();  // need to update in case the passband has changed
+            updateVisualizer();         // update the available continuous channels for visualizer
+        }
+    }
+    else if (newState)
+    {
+        // keep extra channels deselected
+        pc->deselectChannel(chan);
     }
 }
 
@@ -392,11 +367,6 @@ Visualizer* PhaseCalculatorEditor::createNewCanvas()
 {
     canvas = new PhaseCalculatorCanvas(static_cast<PhaseCalculator*>(getProcessor()));
     return canvas;
-}
-
-void PhaseCalculatorEditor::updateSettings()
-{
-    updateVisualizer();
 }
 
 void PhaseCalculatorEditor::saveCustomParameters(XmlElement* xml)
@@ -435,16 +405,53 @@ void PhaseCalculatorEditor::loadCustomParameters(XmlElement* xml)
     }
 }
 
-void PhaseCalculatorEditor::setHighCut(float newHighCut)
+void PhaseCalculatorEditor::refreshLowCut()
 {
-    highCutEditable->setText(String(newHighCut), sendNotificationSync);
+    auto p = static_cast<PhaseCalculator*>(getProcessor());
+    lowCutEditable->setText(String(p->lowCut), dontSendNotification);
 }
 
-void PhaseCalculatorEditor::setVisContinuousChan(int chan)
+void PhaseCalculatorEditor::refreshHighCut()
 {
+    auto p = static_cast<PhaseCalculator*>(getProcessor());
+    highCutEditable->setText(String(p->highCut), dontSendNotification);
+}
+
+void PhaseCalculatorEditor::refreshPredLength()
+{
+    auto p = static_cast<PhaseCalculator*>(getProcessor());
+    int newPredLength = p->predictionLength;
+
+    jassert(predLengthSlider->getMinimum() == 0);
+    int maximum = static_cast<int>(predLengthSlider->getMaximum());
+    jassert(newPredLength >= 0 && newPredLength <= maximum);
+
+    predLengthSlider->setValue(maximum - newPredLength, dontSendNotification);
+    pastLengthEditable->setText(String(maximum - newPredLength), dontSendNotification);
+    predLengthEditable->setText(String(newPredLength), dontSendNotification);
+}
+
+void PhaseCalculatorEditor::refreshHilbertLength()
+{
+    auto p = static_cast<PhaseCalculator*>(getProcessor());
+    int newHilbertLength = p->hilbertLength;
+
+    hilbertLengthBox->setText(String(newHilbertLength), dontSendNotification);
+    predLengthSlider->setRange(0, newHilbertLength, 1);
+
+    // if possible, maintain prediction length while making past + pred = hilbertLength
+    int sliderVal = static_cast<int>(predLengthSlider->getValue());
+    pastLengthEditable->setText(String(sliderVal), dontSendNotification);
+    predLengthEditable->setText(String(newHilbertLength - sliderVal), dontSendNotification);
+}
+
+void PhaseCalculatorEditor::refreshVisContinuousChan()
+{
+    auto p = static_cast<PhaseCalculator*>(getProcessor());
     if (canvas != nullptr)
     {
-        static_cast<PhaseCalculatorCanvas*>(canvas.get())->setContinuousChannel(chan);
+        auto c = static_cast<PhaseCalculatorCanvas*>(canvas.get());
+        c->displayContinuousChan(p->visContinuousChannel);
     }
 }
 
@@ -454,9 +461,11 @@ void PhaseCalculatorEditor::setVisContinuousChan(int chan)
 *  If successful, sets "*out" and the label text to this value and and returns true.
 *  Otherwise, sets the label text to defaultValue and returns false.
 */
-bool PhaseCalculatorEditor::updateIntLabel(Label* label, int min, int max, int defaultValue, int* out)
+template<typename Ctrl>
+bool PhaseCalculatorEditor::updateIntControl(Ctrl* c, const int min, const int max,
+    const int defaultValue, int* out)
 {
-    const String& in = label->getText();
+    const String& in = c->getText();
     int parsedInt;
     try
     {
@@ -464,21 +473,22 @@ bool PhaseCalculatorEditor::updateIntLabel(Label* label, int min, int max, int d
     }
     catch (const std::logic_error&)
     {
-        label->setText(String(defaultValue), dontSendNotification);
+        c->setText(String(defaultValue), dontSendNotification);
         return false;
     }
 
     *out = jmax(min, jmin(max, parsedInt));
 
-    label->setText(String(*out), dontSendNotification);
+    c->setText(String(*out), dontSendNotification);
     return true;
 }
 
-// Like updateIntLabel, but for floats
-bool PhaseCalculatorEditor::updateFloatLabel(Label* label, float min, float max,
+// Like updateIntControl, but for floats
+template<typename Ctrl>
+bool PhaseCalculatorEditor::updateFloatControl(Ctrl* c, float min, float max,
     float defaultValue, float* out)
 {
-    const String& in = label->getText();
+    const String& in = c->getText();
     float parsedFloat;
     try
     {
@@ -486,48 +496,12 @@ bool PhaseCalculatorEditor::updateFloatLabel(Label* label, float min, float max,
     }
     catch (const std::logic_error&)
     {
-        label->setText(String(defaultValue), dontSendNotification);
+        c->setText(String(defaultValue), dontSendNotification);
         return false;
     }
 
     *out = jmax(min, jmin(max, parsedFloat));
 
-    label->setText(String(*out), dontSendNotification);
+    c->setText(String(*out), dontSendNotification);
     return true;
-}
-
-// ProcessBufferSlider definitions
-ProcessBufferSlider::ProcessBufferSlider(const String& componentName)
-    : Slider        (componentName)
-    , realMinValue  (0)
-{
-    setLookAndFeel(&myLookAndFeel);
-    setSliderStyle(LinearBar);
-    setTextBoxStyle(NoTextBox, false, 40, 20);
-    setScrollWheelEnabled(false);
-}
-
-ProcessBufferSlider::~ProcessBufferSlider() {}
-
-double ProcessBufferSlider::snapValue(double attemptedValue, DragMode dragMode)
-{
-    return jmax(attemptedValue, realMinValue);
-}
-
-void ProcessBufferSlider::updateFromProcessor(PhaseCalculator* parentNode)
-{
-    int hilbertLength = parentNode->hilbertLength;
-    int predLength = parentNode->predictionLength;
-    realMinValue = parentNode->arOrder;
-
-    setRange(0, hilbertLength, 1);
-
-    // enforce min value via snapValue and slider listener
-    setValue(0); // hack to ensure the listener gets called even if only the range is changed
-    setValue(hilbertLength - predLength);
-}
-
-double ProcessBufferSlider::getRealMinValue()
-{
-    return realMinValue;
 }
