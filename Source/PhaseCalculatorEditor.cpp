@@ -360,11 +360,6 @@ void PhaseCalculatorEditor::channelChanged(int chan, bool newState)
             updateVisualizer();         // update the available continuous channels for visualizer
         }
     }
-    else if (newState)
-    {
-        // keep extra channels deselected
-        pc->deselectChannel(chan);
-    }
 }
 
 void PhaseCalculatorEditor::startAcquisition()
