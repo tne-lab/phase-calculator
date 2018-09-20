@@ -965,6 +965,9 @@ void PhaseCalculator::updateExtraChannels()
                 baseChan->getSampleRate(),
                 this,
                 subProcessorMap[baseFullId]);
+
+            // rename to match base channel (implies that it contains magnitude data)
+            newChan->setName(baseChan->getName() + "MAG");
             newChan->setBitVolts(baseChan->getBitVolts());
             newChan->addToHistoricString(getName());
             dataChannelArray.add(newChan);
