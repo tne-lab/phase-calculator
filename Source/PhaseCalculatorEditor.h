@@ -47,6 +47,9 @@ public:
     // overrides GenericEditor
     void sliderEvent(Slider* slider) override;
 
+    // overrides GenericEditor. Deal with record buttons for extra channels.
+    void buttonEvent(Button* button) override;
+
     // update display based on current channel
     void channelChanged(int chan, bool newState) override;
 
@@ -55,6 +58,8 @@ public:
     void stopAcquisition() override;
 
     Visualizer* createNewCanvas() override;
+
+    void updateSettings() override;
 
     void saveCustomParameters(XmlElement* xml) override;
     void loadCustomParameters(XmlElement* xml) override;
@@ -81,6 +86,10 @@ private:
     template<typename Ctrl>
     static bool updateFloatControl(Ctrl* c, const float min, const float max,
         const float defaultValue, float* out);
+
+    // keep track of the record status of each "extra" channel
+    Array<bool> extraChanRecordStatus;
+    int prevExtraChans;
 
     ScopedPointer<Label>    lowCutLabel;
     ScopedPointer<Label>    lowCutEditable;

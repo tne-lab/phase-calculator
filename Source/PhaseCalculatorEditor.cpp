@@ -25,7 +25,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <climits> // INT_MAX
 
 PhaseCalculatorEditor::PhaseCalculatorEditor(GenericProcessor* parentNode, bool useDefaultParameterEditors)
-    : VisualizerEditor     (parentNode, 325, useDefaultParameterEditors)
+    : VisualizerEditor  (parentNode, 325, useDefaultParameterEditors)
+    , prevExtraChans    (0)
 {
     tabText = "Event Phase Plot";
     int filterWidth = 80;
@@ -301,22 +302,53 @@ void PhaseCalculatorEditor::sliderEvent(Slider* slider)
     }
 }
 
+void PhaseCalculatorEditor::buttonEvent(Button* button)
+{
+    // if it's a ChannelSelectorButton, assume it's a record button and update record status
+    auto recordButton = dynamic_cast<ChannelSelectorButton*>(button);
+    if (recordButton != nullptr)
+    {
+        int numInputs = static_cast<PhaseCalculator*>(getProcessor())->getNumInputs();
+        int chanInd = button->getParentComponent()->getIndexOfChildComponent(button);
+        int extraChanInd = chanInd - numInputs;
+        if (extraChanInd < 0 || extraChanInd >= extraChanRecordStatus.size())
+        {
+            jassertfalse;
+            return;
+        }
+        extraChanRecordStatus.set(extraChanInd, recordButton->getToggleState());
+    }
+}
+
 void PhaseCalculatorEditor::channelChanged(int chan, bool newState)
 {
     auto pc = static_cast<PhaseCalculator*>(getProcessor());    
     if (chan < pc->getNumInputs())
     {
-        if (newState)
-        {
-            int numActiveChans = pc->getActiveInputs().size();
-            if (numActiveChans > pc->numActiveChansAllocated)
-            {
-                pc->addActiveChannel();
-            }
+        Array<int> activeInputs = pc->getActiveInputs();
+        int numActiveInputs = activeInputs.size();
+        if (newState && numActiveInputs > pc->numActiveChansAllocated)
+        {            
+            pc->addActiveChannel();
         }
 
         if (pc->outputMode == PH_AND_MAG)
         {
+            if (newState)
+            {
+                int newInputIndex = activeInputs.indexOf(chan);
+                jassert(newInputIndex <= extraChanRecordStatus.size());
+                extraChanRecordStatus.insert(newInputIndex, false);
+            }
+            else
+            {
+                // find # of lower-index active inputs
+                int i = 0;
+                for (; i < numActiveInputs && activeInputs[i] < chan; ++i);
+                jassert(i < extraChanRecordStatus.size());
+                extraChanRecordStatus.remove(i);
+            }
+
             // Update signal chain to add/remove output channels if necessary
             CoreServices::updateSignalChain(this);
         }
@@ -367,6 +399,59 @@ Visualizer* PhaseCalculatorEditor::createNewCanvas()
 {
     canvas = new PhaseCalculatorCanvas(static_cast<PhaseCalculator*>(getProcessor()));
     return canvas;
+}
+
+void PhaseCalculatorEditor::updateSettings()
+{
+    auto pc = static_cast<PhaseCalculator*>(getProcessor());
+
+    // only care about any of this stuff if we have extra channels
+    // (and preserve when deselecting/reselecting PH_AND_MAG)
+    if (pc->outputMode != PH_AND_MAG || channelSelector == nullptr) { return; }
+    
+    int numChans = pc->getNumOutputs();
+    int numInputs = pc->getNumInputs();
+    int extraChans = numChans - numInputs;
+
+    int prevNumChans = channelSelector->getNumChannels();
+    int prevNumInputs = prevNumChans - prevExtraChans;
+    prevExtraChans = extraChans; // update for next time
+
+    extraChanRecordStatus.resize(extraChans);
+    channelSelector->setNumChannels(numChans);
+
+    // super hacky, access record buttons to add or remove listeners
+    Component* rbmComponent = channelSelector->getChildComponent(9);
+    auto recordButtonManager = dynamic_cast<ButtonGroupManager*>(rbmComponent);
+    if (recordButtonManager == nullptr)
+    {
+        jassertfalse;
+        return;
+    }
+
+    // remove listeners on channels that are no longer "extra channels"
+    // and set their record status to false since they're actually new channels
+    for (int chan = prevNumInputs; chan < jmin(prevNumChans, numInputs); ++chan)
+    {
+        juce::Button* recordButton = recordButtonManager->getButtonAt(chan);
+        recordButton->removeListener(this);
+        // make sure listener really gets called
+        recordButton->setToggleState(true, dontSendNotification);
+        channelSelector->setRecordStatus(chan, false);
+    }
+
+    // add listeners for current "extra channels" and restore record statuses
+    // (it's OK if addListener gets called more than once for a button)
+    for (int eChan = 0; eChan < extraChans; ++eChan)
+    {
+        int chan = numInputs + eChan;
+        juce::Button* recordButton = recordButtonManager->getButtonAt(chan);
+        recordButton->removeListener(this);
+        // make sure listener really gets called
+        recordButton->setToggleState(!extraChanRecordStatus[eChan], dontSendNotification);
+        channelSelector->setRecordStatus(chan, extraChanRecordStatus[eChan]);
+        recordButton->addListener(this);
+    }
 }
 
 void PhaseCalculatorEditor::saveCustomParameters(XmlElement* xml)
