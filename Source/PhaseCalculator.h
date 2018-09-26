@@ -342,18 +342,4 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PhaseCalculator);
 };
 
-// timer class for use when calculating AR parameters
-class ARTimer : public Timer
-{
-public:
-    ARTimer();
-    ~ARTimer();
-    void timerCallback();
-    // Returns whether hasRung is true and resets it to false.
-    bool check();
-private:
-    // True if timer has reached 0 since last time it was checked.
-    bool hasRung;
-};
-
 #endif // PHASE_CALCULATOR_H_INCLUDED

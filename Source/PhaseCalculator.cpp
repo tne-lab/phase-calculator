@@ -397,18 +397,12 @@ void PhaseCalculator::run()
     Array<double> paramsTemp;
     paramsTemp.resize(arOrder);
 
-    ARTimer timer;
-    int currInterval = calcInterval;
-    timer.startTimer(currInterval);
-
     int numActiveChans = getActiveInputs().size();
 
-    while (true)
+    uint32 startTime, endTime;
+    while (!threadShouldExit())
     {
-        if (threadShouldExit())
-        {
-            return;
-        }
+        startTime = Time::getMillisecondCounter();
 
         for (int activeChan = 0; activeChan < numActiveChans; ++activeChan)
         {
@@ -445,28 +439,11 @@ void PhaseCalculator::run()
             chanState.set(activeChan, FULL_AR);
         }
 
-        // update interval
-        if (calcInterval != currInterval)
+        endTime = Time::getMillisecondCounter();
+        int remainingInterval = calcInterval - (endTime - startTime);
+        if (remainingInterval >= 10) // avoid WaitForSingleObject
         {
-            currInterval = calcInterval;
-            timer.stopTimer();
-            timer.startTimer(currInterval);
-        }
-
-        while (!timer.check())
-        {
-            if (threadShouldExit())
-            {
-                return;
-            }
-
-            if (calcInterval != currInterval)
-            {
-                currInterval = calcInterval;
-                timer.stopTimer();
-                timer.startTimer(currInterval);
-            }
-            sleep(10);
+            sleep(remainingInterval);
         }
     }
 }
@@ -1103,25 +1080,4 @@ void PhaseCalculator::hilbertManip(FFTWArray* fftData)
 
     // set negative frequencies to 0
     FloatVectorOperations::clear(reinterpret_cast<double*>(wp + firstNegFreq), numPosNegFreqDoubles);
-}
-
-// ----------- ARTimer ---------------
-
-ARTimer::ARTimer() : Timer()
-{
-    hasRung = false;
-}
-
-ARTimer::~ARTimer() {}
-
-void ARTimer::timerCallback()
-{
-    hasRung = true;
-}
-
-bool ARTimer::check()
-{
-    bool temp = hasRung;
-    hasRung = false;
-    return temp;
 }

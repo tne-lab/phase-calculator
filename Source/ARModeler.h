@@ -54,12 +54,19 @@ public:
         return true;
     }
 
-    void fitModel(const Array<double>& inputseries, Array<double>& coef)
+    void fitModel(const Array<double>& j_inputseries, Array<double>& j_coef)
     {
-        jassert(inputseries.size() == inputLength);
-        jassert(coef.size() == arOrder);
+        jassert(j_inputseries.size() == inputLength);
+        jassert(j_coef.size() == arOrder);
         double t1, t2;
         int n;
+
+        // get raw pointers to improve performance
+        const double* inputseries = j_inputseries.begin();
+        double* coef = j_coef.begin();
+        double* per = j_per.begin();
+        double* pef = j_pef.begin();
+        double* h = j_h.begin();
 
         // reset per and pef
         resetPredictionError();
@@ -80,20 +87,20 @@ public:
             }
 
             t1 = sn / sd;
-            coef.setUnchecked(n - 1, t1);
+            coef[n - 1] = t1;
             if (n != 1)
             {
                 for (j = 1; j < n; j++)
-                    h.setUnchecked(j - 1, coef[j - 1] + t1 * coef[n - j - 1]);
+                    h[j - 1] = coef[j - 1] + t1 * coef[n - j - 1];
                 for (j = 1; j < n; j++)
-                    coef.setUnchecked(j - 1, h[j - 1]);
+                    coef[j - 1] = h[j - 1];
                 jj--;
             }
 
             for (j = 0; j < jj; j++)
             {
-                per.setUnchecked(j, per[j] + t1 * pef[j] + t1 * inputseries[j + n]);
-                pef.setUnchecked(j, pef[j + 1] + t1 * per[j + 1] + t1 * inputseries[j + 1]);
+                per[j] = per[j] + t1 * pef[j] + t1 * inputseries[j + n];
+                pef[j] = pef[j + 1] + t1 * per[j + 1] + t1 * inputseries[j + 1];
             }
         }
     }
@@ -102,23 +109,23 @@ private:
 
     void reallocateStorage()
     {
-        h.resize(arOrder - 1);
+        j_h.resize(arOrder - 1);
         resetPredictionError();
     }
 
     void resetPredictionError()
     {
-        per.clearQuick();
-        per.insertMultiple(0, 0, inputLength);
-        pef.clearQuick();
-        pef.insertMultiple(0, 0, inputLength);
+        j_per.clearQuick();
+        j_per.insertMultiple(0, 0, inputLength);
+        j_pef.clearQuick();
+        j_pef.insertMultiple(0, 0, inputLength);
     }
 
     int arOrder;
     int inputLength;
-    Array<double> per;
-    Array<double> pef;
-    Array<double> h;
+    Array<double> j_per;
+    Array<double> j_pef;
+    Array<double> j_h;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ARModeler);
 };
