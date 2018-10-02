@@ -275,10 +275,10 @@ void PhaseCalculator::process(AudioSampleBuffer& buffer)
 
             arPredict(rpBuffer, wpHilbert, predictionLength, pLocalParam, arOrder);
 
-            // Hilbert-transform dataToProcess
-            forwardPlan[activeChan]->execute();      // reads from dataToProcess, writes to fftData
+            // Hilbert-transform hilbertBuffer
+            forwardPlan[activeChan]->execute();
             hilbertManip(hilbertBuffer[activeChan]);
-            backwardPlan[activeChan]->execute();     // reads from fftData, writes to dataOut
+            backwardPlan[activeChan]->execute();
 
             // calculate phase and write out to buffer
             auto rpHilbert = hilbertBuffer[activeChan]->getComplexPointer(hilbertPastLength - nSamplesToProcess);
