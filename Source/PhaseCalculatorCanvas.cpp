@@ -392,9 +392,9 @@ RosePlot::~RosePlot() {}
 void RosePlot::paint(Graphics& g)
 {
     // dimensions
-    juce::Rectangle<int> bounds = getBounds();
-    int squareSide = jmin(bounds.getHeight(), bounds.getWidth() - 2 * TEXT_BOX_SIZE);
-    juce::Rectangle<float> plotBounds = bounds.withZeroOrigin().toFloat();
+    juce::Rectangle<float> bounds = getBounds().toFloat();
+    float squareSide = jmin(bounds.getHeight(), bounds.getWidth() - 2 * TEXT_BOX_SIZE);
+    juce::Rectangle<float> plotBounds = bounds.withZeroOrigin();
     plotBounds = plotBounds.withSizeKeepingCentre(squareSide, squareSide);
     g.setColour(bgColor);
     g.fillEllipse(plotBounds);
@@ -407,7 +407,7 @@ void RosePlot::paint(Graphics& g)
     g.setFont(Font(TEXT_BOX_SIZE / 2, Font::bold));
     for (int i = 0; i < 12; ++i)
     {
-        float juceAngle = i * PI / 6;
+        float juceAngle = i * PI_F / 6;
         spoke.setEnd(center.getPointOnCircumference(squareSide / 2, juceAngle));
         g.setColour(Colours::lightgrey);
         g.drawLine(spoke);
@@ -438,7 +438,7 @@ void RosePlot::paint(Graphics& g)
     int totalCount = 0;
     for (int seg = 0; seg < nSegs; ++seg)
     {
-        int count = angleData->count(binMidpoints[seg] + referenceAngle);
+        int count = static_cast<int>(angleData->count(binMidpoints[seg] + referenceAngle));
         segmentCounts.set(seg, count);
         maxCount = jmax(maxCount, count);
         totalCount += count;
@@ -491,7 +491,7 @@ void RosePlot::setReference(double newReference)
 
 void RosePlot::addAngle(double newAngle)
 {
-    newAngle = circDist(newAngle, 0);
+    newAngle = circDist(newAngle, 0.0);
     angleData->insert(newAngle);
     rSum += std::exp(std::complex<double>(0, newAngle));
     repaint();
@@ -506,7 +506,7 @@ void RosePlot::clear()
 
 int RosePlot::getNumAngles()
 {
-    return angleData->size();
+    return static_cast<int>(angleData->size());
 }
 
 double RosePlot::getCircMean(bool usingReference)
@@ -542,15 +542,15 @@ void RosePlot::labelTextChanged(Label* labelThatHasChanged)
 {
     if (labelThatHasChanged->getName() == "referenceEditable")
     {
-        float floatInput;
-        float currReferenceDeg = static_cast<float>(referenceAngle * 180.0 / PI);
-        bool valid = PhaseCalculatorEditor::updateFloatControl(labelThatHasChanged,
-            -FLT_MAX, FLT_MAX, currReferenceDeg, &floatInput);
+        double doubleInput;
+        double currReferenceDeg = referenceAngle * 180.0 / PI;
+        bool valid = PhaseCalculatorEditor::updateControl(labelThatHasChanged,
+            -DBL_MAX, DBL_MAX, currReferenceDeg, &doubleInput);
 
         if (valid)
         {
             // convert to radians
-            double newReference = circDist(floatInput * PI / 180.0, 0);
+            double newReference = circDist(doubleInput * PI / 180.0, 0.0);
             labelThatHasChanged->setText(String(newReference * 180.0 / PI), dontSendNotification);
             setReference(newReference);
             canvas->updateStatLabels();
@@ -560,8 +560,8 @@ void RosePlot::labelTextChanged(Label* labelThatHasChanged)
 
 
 /*** RosePlot private members ***/
-
 const double RosePlot::PI = 4 * std::atan(1.0);
+const float RosePlot::PI_F = 4 * std::atan(1.0f);
 
 RosePlot::circularBinComparator::circularBinComparator(int numBinsIn, double referenceAngleIn)
     : numBins           (numBinsIn)
@@ -610,12 +610,12 @@ double RosePlot::circDist(double x, double ref)
 
 void RosePlot::updateAngles()
 {
-    double step = 2 * PI / numBins;
+    float step = 2 * PI_F / numBins;
     binMidpoints.resize(numBins);
     for (int i = 0; i < numBins; ++i)
     {
         binMidpoints.set(i, step * (i + 0.5));
-        float firstAngle = circDist(PI / 2, step * (i + 1));
+        float firstAngle = static_cast<float>(circDist(PI / 2, step * (i + 1)));
         segmentAngles.set(i, { firstAngle, firstAngle + step });
     }
 }

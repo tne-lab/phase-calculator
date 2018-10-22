@@ -23,6 +23,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "PhaseCalculatorEditor.h"
 #include "PhaseCalculatorCanvas.h"
 #include <climits> // INT_MAX
+#include <string>  // stoi, stof, stod
 
 PhaseCalculatorEditor::PhaseCalculatorEditor(GenericProcessor* parentNode, bool useDefaultParameterEditors)
     : VisualizerEditor  (parentNode, 325, useDefaultParameterEditors)
@@ -206,8 +207,8 @@ void PhaseCalculatorEditor::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
         {            
             newHilbertLength = (1 << newId);
         }
-        else if (!updateIntControl(comboBoxThatHasChanged, PhaseCalculator::MIN_HILB_LEN_POW,
-            PhaseCalculator::MAX_HILB_LEN_POW, processor->hilbertLength, &newHilbertLength))
+        else if (!updateControl(comboBoxThatHasChanged, 1 << PhaseCalculator::MIN_HILB_LEN_POW,
+            1 << PhaseCalculator::MAX_HILB_LEN_POW, processor->hilbertLength, &newHilbertLength))
         {
             return;
         }
@@ -229,7 +230,7 @@ void PhaseCalculatorEditor::labelTextChanged(Label* labelThatHasChanged)
     if (labelThatHasChanged == pastLengthEditable)
     {
         int intInput;
-        bool valid = updateIntControl(labelThatHasChanged, 0, processor->hilbertLength,
+        bool valid = updateControl(labelThatHasChanged, 0, processor->hilbertLength,
             processor->hilbertLength - processor->predictionLength, &intInput);
 
         if (valid)
@@ -240,7 +241,7 @@ void PhaseCalculatorEditor::labelTextChanged(Label* labelThatHasChanged)
     else if (labelThatHasChanged == predLengthEditable)
     {
         int intInput;
-        bool valid = updateIntControl(labelThatHasChanged, 0, processor->hilbertLength,
+        bool valid = updateControl(labelThatHasChanged, 0, processor->hilbertLength,
             processor->predictionLength, &intInput);
         
         if (valid)
@@ -251,7 +252,7 @@ void PhaseCalculatorEditor::labelTextChanged(Label* labelThatHasChanged)
     else if (labelThatHasChanged == recalcIntervalEditable)
     {
         int intInput;
-        bool valid = updateIntControl(labelThatHasChanged, 0, INT_MAX, processor->calcInterval, &intInput);
+        bool valid = updateControl(labelThatHasChanged, 0, INT_MAX, processor->calcInterval, &intInput);
 
         if (valid)
         {
@@ -261,7 +262,7 @@ void PhaseCalculatorEditor::labelTextChanged(Label* labelThatHasChanged)
     else if (labelThatHasChanged == arOrderEditable)
     {
         int intInput;
-        bool valid = updateIntControl(labelThatHasChanged, 1, INT_MAX, processor->arOrder, &intInput);
+        bool valid = updateControl(labelThatHasChanged, 1, INT_MAX, processor->arOrder, &intInput);
 
         if (valid)
         {
@@ -271,7 +272,7 @@ void PhaseCalculatorEditor::labelTextChanged(Label* labelThatHasChanged)
     else if (labelThatHasChanged == lowCutEditable)
     {
         float floatInput;
-        bool valid = updateFloatControl(labelThatHasChanged, PhaseCalculator::PASSBAND_EPS,
+        bool valid = updateControl(labelThatHasChanged, PhaseCalculator::PASSBAND_EPS,
             processor->minNyquist - PhaseCalculator::PASSBAND_EPS, processor->lowCut, &floatInput);
 
         if (valid)
@@ -282,7 +283,7 @@ void PhaseCalculatorEditor::labelTextChanged(Label* labelThatHasChanged)
     else if (labelThatHasChanged == highCutEditable)
     {
         float floatInput;
-        bool valid = updateFloatControl(labelThatHasChanged, 2 * PhaseCalculator::PASSBAND_EPS,
+        bool valid = updateControl(labelThatHasChanged, 2 * PhaseCalculator::PASSBAND_EPS,
             processor->minNyquist, processor->highCut, &floatInput);
 
         if (valid) 
@@ -296,8 +297,8 @@ void PhaseCalculatorEditor::sliderEvent(Slider* slider)
 {
     if (slider == predLengthSlider)
     {
-        int newVal = slider->getValue();
-        int maxVal = slider->getMaximum();        
+        int newVal = static_cast<int>(slider->getValue());
+        int maxVal = static_cast<int>(slider->getMaximum());
         getProcessor()->setParameter(PRED_LENGTH, static_cast<float>(maxVal - newVal));
     }
 }
@@ -537,51 +538,20 @@ void PhaseCalculatorEditor::refreshVisContinuousChan()
 
 // static utilities
 
-/* Attempts to parse the current text of a label as an int between min and max inclusive.
-*  If successful, sets "*out" and the label text to this value and and returns true.
-*  Otherwise, sets the label text to defaultValue and returns false.
-*/
-template<typename Ctrl>
-bool PhaseCalculatorEditor::updateIntControl(Ctrl* c, const int min, const int max,
-    const int defaultValue, int* out)
+template<>
+int PhaseCalculatorEditor::fromString<int>(const char* in)
 {
-    const String& in = c->getText();
-    int parsedInt;
-    try
-    {
-        parsedInt = std::stoi(in.toRawUTF8());
-    }
-    catch (const std::logic_error&)
-    {
-        c->setText(String(defaultValue), dontSendNotification);
-        return false;
-    }
-
-    *out = jmax(min, jmin(max, parsedInt));
-
-    c->setText(String(*out), dontSendNotification);
-    return true;
+    return std::stoi(in);
 }
 
-// Like updateIntControl, but for floats
-template<typename Ctrl>
-bool PhaseCalculatorEditor::updateFloatControl(Ctrl* c, float min, float max,
-    float defaultValue, float* out)
+template<>
+float PhaseCalculatorEditor::fromString<float>(const char* in)
 {
-    const String& in = c->getText();
-    float parsedFloat;
-    try
-    {
-        parsedFloat = std::stof(in.toRawUTF8());
-    }
-    catch (const std::logic_error&)
-    {
-        c->setText(String(defaultValue), dontSendNotification);
-        return false;
-    }
+    return std::stof(in);
+}
 
-    *out = jmax(min, jmin(max, parsedFloat));
-
-    c->setText(String(*out), dontSendNotification);
-    return true;
+template<>
+double PhaseCalculatorEditor::fromString<double>(const char* in)
+{
+    return std::stod(in);
 }

@@ -229,8 +229,8 @@ private:
     OutputMode outputMode;
 
     // filter passband
-    double highCut;
-    double lowCut;
+    float highCut;
+    float lowCut;
 
     // event channel to watch for phases to plot on the canvas (-1 = none)
     int visEventChannel;

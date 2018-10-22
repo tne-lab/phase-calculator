@@ -120,6 +120,7 @@ private:
     std::complex<double> rSum;
 
     static const double PI;
+    static const float PI_F;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RosePlot);
 };
