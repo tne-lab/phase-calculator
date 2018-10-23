@@ -35,7 +35,7 @@ class PhaseCalculatorEditor
 {
     friend class RosePlot;  // to access label updating method
 public:
-    PhaseCalculatorEditor(GenericProcessor* parentNode, bool useDefaultParameterEditors = false);
+    PhaseCalculatorEditor(PhaseCalculator* parentNode, bool useDefaultParameterEditors = false);
     ~PhaseCalculatorEditor();
 
     // implements ComboBox::Listener
@@ -46,9 +46,6 @@ public:
 
     // overrides GenericEditor
     void sliderEvent(Slider* slider) override;
-
-    // overrides GenericEditor. Deal with record buttons for extra channels.
-    void buttonEvent(Button* button) override;
 
     // update display based on current channel
     void channelChanged(int chan, bool newState) override;
@@ -109,8 +106,30 @@ private:
     }
 
     // keep track of the record status of each "extra" channel
-    Array<bool> extraChanRecordStatus;
+    // this is all a bit kludgy, but also temporary until creating continuous
+    // channels in non-source processors is officially implemented.
+    class ExtraChanManager : public Button::Listener
+    {
+    public:
+        ExtraChanManager(const PhaseCalculator* processor);
+
+        // keeps recordStatus in sync with extra channel record buttons.
+        void buttonClicked(Button* button) override;
+
+        // adds or removes recordStatus entry for extra chan
+        // corresponding to given input chan.
+        void addExtraChan(int inputChan, const Array<int>& activeInputs);
+        void removeExtraChan(int inputChan, const Array<int>& activeInputs);
+        void resize(int numExtraChans);
+
+        bool getRecordStatus(int extraChan) const;
+    private:
+        const PhaseCalculator* p;
+        Array<bool> recordStatus;
+    };
+
     int prevExtraChans;
+    ExtraChanManager extraChanManager;
 
     ScopedPointer<Label>    lowCutLabel;
     ScopedPointer<Label>    lowCutEditable;
