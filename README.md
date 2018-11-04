@@ -12,13 +12,24 @@ Blackwood, E., Lo, M., Widge, A. S. (2018). Continuous phase estimation for phas
 
 (Instructions here are for Windows and Linux - Mac support may be coming soon.)
 
-The Phase Calculator depends on a Discrete Fourier Transform library called FFTW (version 3). For Windows, the precompiled version is included here. On Linux, it can be installed from source or possibly from your distribution's package manager.
+### Step 1: Decide which version to use.
 
-Here it is assumed that you are adding the Phase Calculator to an existing `plugin-GUI` repository. It must be new enough to have the `DspLib` common library, which was introduced on Feb 8, 2018 on the development branch (commit `2dcb98b...`).
+* You are on the `master` branch, which uses the Fourier-transform-based [Hilbert transform](https://en.wikipedia.org/wiki/Hilbert_transform) over a sliding window to estimate the analytic signal (from which we derive the phase). We have been testing variants of this algorithm in our lab since mid-2016, and it is now fairly polished, but is somewhat less computationally efficient than the newer version.
+
+* If you want, you can switch to the `hilbert-transformer` branch, which uses a [Hilbert transformer](https://www.intechopen.com/books/matlab-a-fundamental-tool-for-scientific-computing-and-engineering-applications-volume-1/digital-fir-hilbert-transformers-fundamentals-and-efficient-design-methods) FIR filter instead - actually one of several, depending on the frequency band you are filtering to. This is more efficient since it doesn't require as much AR model-based prediction nor calculating an FFT on each step. However, it's not as well-tested.
+
+* Alternatively, you can use the `tnel-development` (old algorithm) or `hilbert-transformer` (new algorithm) branch of [tne-lab/plugin-GUI](https://github.com/tne-lab/plugin-GUI/tree/tnel-development), which is a fork of the Open Ephys GUI source code with this plugin and some other useful ones already built in. Then you don't even need this repository or the rest of the instructions! (If you're on Linux though, you'll still have to install FFTW as described below.) Beware though, these are development branches and will be more unstable than `open-ephys/plugin-GUI/master`.
 
 ### All platforms:
 
-* Create the directory `plugin-GUI/Source/Plugins/PhaseCalculator` and copy all contents of `Source` into it.
+* If you haven't already, download the base source at https://github.com/open-ephys/plugin-GUI (either by cloning or downloading a ZIP file from the `master` branch).
+
+  * If you already have the source or your own fork, it must be new enough to have the `DspLib` library, which was added on Feb 8, 2018 on the development branch (commit `2dcb98b...`).
+
+
+* Download/clone this repository, making sure you're on the desired branch as described above.
+
+* Create the directory `plugin-GUI/Source/Plugins/PhaseCalculator` and copy all contents of this repository's `Source` into it.
 
 ### Windows (Visual Studio 2013)
 
