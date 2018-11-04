@@ -6,7 +6,8 @@ The closed-loop system incorporating this plugin is described in the following a
 
 Blackwood, E., Lo, M., Widge, A. S. (2018). Continuous phase estimation for phase-locked neural stimulation using an autoregressive model for signal prediction. 40th International Conference of the IEEE Engineering in Medicine and Biology Society, in press.
 
-<img src="PC_front.png" width="328" /> <img src="PC_vis.png" width="350" />
+<img src="ht_pc.png" width="200" /><img src="ht_pc_menu1.png" width="200"/><img src="ht_pc_menu2.png" width="200"/>
+<img src="PC_vis.png" width="350" />
 
 ## Installation
 
@@ -14,9 +15,9 @@ Blackwood, E., Lo, M., Widge, A. S. (2018). Continuous phase estimation for phas
 
 ### Step 1: Decide which version to use.
 
-* You are on the `master` branch, which uses the Fourier-transform-based [Hilbert transform](https://en.wikipedia.org/wiki/Hilbert_transform) over a sliding window to estimate the analytic signal (from which we derive the phase). We have been testing variants of this algorithm in our lab since mid-2016, and it is now fairly polished, but is somewhat less computationally efficient than the newer version.
+* You are on the `hilbert-transformer` branch, which uses a [Hilbert transformer](https://www.intechopen.com/books/matlab-a-fundamental-tool-for-scientific-computing-and-engineering-applications-volume-1/digital-fir-hilbert-transformers-fundamentals-and-efficient-design-methods) FIR filter instead - actually one of several, depending on the frequency band you are filtering to. This is more efficient than the original (published) algorithm since it doesn't require as much AR model-based prediction nor calculating an FFT on each step. However, it's not as well-tested.
 
-* If you want, you can switch to the `hilbert-transformer` branch, which uses a [Hilbert transformer](https://www.intechopen.com/books/matlab-a-fundamental-tool-for-scientific-computing-and-engineering-applications-volume-1/digital-fir-hilbert-transformers-fundamentals-and-efficient-design-methods) FIR filter instead - actually one of several, depending on the frequency band you are filtering to. This is more efficient since it doesn't require as much AR model-based prediction nor calculating an FFT on each step. However, it's not as well-tested.
+* If you want, you can switch to the `master` branch, which uses the Fourier-transform-based [Hilbert transform](https://en.wikipedia.org/wiki/Hilbert_transform) over a sliding window to estimate the analytic signal (from which we derive the phase). We have been testing variants of this algorithm in our lab since mid-2016, and it is now fairly polished, but is somewhat less computationally efficient than the newer version.
 
 * Alternatively, you can use the `tnel-development` (old algorithm) or `hilbert-transformer` (new algorithm) branch of [tne-lab/plugin-GUI](https://github.com/tne-lab/plugin-GUI/tree/tnel-development), which is a fork of the Open Ephys GUI source code with this plugin and some other useful ones already built in. Then you don't even need this repository or the rest of the instructions! (If you're on Linux though, you'll still have to install FFTW as described below.) Beware though, these are development branches and will be more unstable than `open-ephys/plugin-GUI/master`.
 
@@ -55,9 +56,9 @@ Blackwood, E., Lo, M., Widge, A. S. (2018). Continuous phase estimation for phas
 
 * ***Important!*** Since the phase estimation algorithm is somewhat processor-intensive, by default all input channels are disabled. To enable the channels you would like to estimate the phase (or other component) of, select them in the "PARAM" section of the drawer. If "PH+MAG" is selcected as the output, this will also create the additional magnitude outputs for each selected input.
 
-* Use "Low cut" and "High cut" to select the desired frequency passband. (Inputs should be unfiltered; the Phase Calculator uses its own bandpass filter.)
+* In the "freq range" dropdown menu, choose a range of frequencies that includes the band you want to filter to. This determines which of the pre-designed Hilbert transformer filters is used internally (since if we tried to use one filter for all frequencies, it would end up with terrible performance everywhere). Note that the delta band is just too low to get a reasonably accurate phase estimate, even when downsampling to 500 Hz as this plugin does (before interpolating the output).
 
-* The "Buffer length," "Past," and "Future" settings control the size and contents of the "Hilbert buffer" that is passed through the Hilbert transform to get the analytic (complex) signal for each channel. The "Past" length is the number of received samples to include on each iteration, including the current "processing buffer" (buffer of new data, whose size can be changed in the Audio Settings). The "Future" length is the number of samples of band-limited signal predicted using an autoregressive model to include. (See Blackwood, Lo & Widge, 2018 (once published) for more explanation of the algorithm.) The defaults are reasonable for a 4-8 Hz passband with a short processing buffer size. A longer buffer length generally increases the estimation accuracy at the cost of greater processing time. Also, one should optimally center the last (current) processing buffer of "past" data within the Hilbert buffer by setting "Future" to half of "Buffer Length" minus half of the processing buffer size. This ensures the maximal accuracy of the region of the Hilbert output corresponding to the current buffer.
+* Use "Low cut" and "High cut" to select the desired frequency passband. (Inputs should be unfiltered; the Phase Calculator uses its own bandpass filter internally.) Changing the frequency range will automatically set a default high and low cut, but they can be changed to filter to any band within the range.
 
 * "AR Refresh" and "Order" control the autoregressive model used to predict the "future" portion of the Hilbert buffer. AR parameters are estimated using Burg's method. The default settings seem to work well, but other settings (particularly lower orders) may also work well.
 

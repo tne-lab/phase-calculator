@@ -89,9 +89,6 @@ private:
         AngleDataMultiset(int numBins, double referenceAngle, AngleDataMultiset* dataSource);
     };
 
-    // circular distance in radians (return value is in [0, 2*pi))
-    static double circDist(double x, double ref);
-
     // make binMidpoints and segmentAngles reflect current numBins
     void updateAngles();
 

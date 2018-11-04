@@ -24,14 +24,9 @@
 
 class ARModeler {
 public:
-    ARModeler() : arOrder(1), inputLength(2)
+    ARModeler(int order = 1, int length = 2, int strideIn = 1, bool* success = nullptr)
     {
-        reallocateStorage();
-    }
-
-    ARModeler(int order, int length, bool* success = nullptr) : ARModeler()
-    {
-        bool s = setParams(order, length);
+        bool s = setParams(order, length, strideIn);
         if (success != nullptr)
         {
             *success = s;
@@ -41,15 +36,18 @@ public:
     ~ARModeler() { }
 
     // returns true if successful.
-    bool setParams(int order, int length)
+    bool setParams(int order, int length, int strideIn)
     {
-        if (order < 1 || order >= length)
+        int newStridedLength = calcStridedLength(length, strideIn);
+        if (order < 1 || newStridedLength < order + 1)
         {
             jassertfalse;
             return false;
         }
         arOrder = order;
         inputLength = length;
+        stride = strideIn;
+        stridedLength = newStridedLength;
         reallocateStorage();
         return true;
     }
@@ -76,12 +74,12 @@ public:
             double sn = 0.0;
             double sd = 0.0;
             int j;
-            int jj = inputLength - n;
+            int jj = stridedLength - n;
 
             for (j = 0; j < jj; j++)
             {
-                t1 = inputseries[j + n] + pef[j];
-                t2 = inputseries[j] + per[j];
+                t1 = inputseries[stride * (j + n)] + pef[j];
+                t2 = inputseries[stride * j] + per[j];
                 sn -= 2.0 * t1 * t2;
                 sd += (t1 * t1) + (t2 * t2);
             }
@@ -99,8 +97,8 @@ public:
 
             for (j = 0; j < jj; j++)
             {
-                per[j] = per[j] + t1 * pef[j] + t1 * inputseries[j + n];
-                pef[j] = pef[j + 1] + t1 * per[j + 1] + t1 * inputseries[j + 1];
+                per[j] = per[j] + t1 * pef[j] + t1 * inputseries[stride * (j + n)];
+                pef[j] = pef[j + 1] + t1 * per[j + 1] + t1 * inputseries[stride * (j + 1)];
             }
         }
     }
@@ -116,13 +114,21 @@ private:
     void resetPredictionError()
     {
         j_per.clearQuick();
-        j_per.insertMultiple(0, 0, inputLength);
+        j_per.insertMultiple(0, 0, stridedLength);
         j_pef.clearQuick();
-        j_pef.insertMultiple(0, 0, inputLength);
+        j_pef.insertMultiple(0, 0, stridedLength);
+    }
+
+    static int calcStridedLength(int inputLength, int stride)
+    {
+        jassert(stride > 0);
+        return (inputLength + (stride - 1)) / stride;
     }
 
     int arOrder;
     int inputLength;
+    int stridedLength;
+    int stride;
     Array<double> j_per;
     Array<double> j_pef;
     Array<double> j_h;

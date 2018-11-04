@@ -24,6 +24,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef PHASE_CALCULATOR_EDITOR_H_INCLUDED
 #define PHASE_CALCULATOR_EDITOR_H_INCLUDED
 
+#include <sstream>  // string parsing
 #include <VisualizerEditorHeaders.h>
 
 #include "PhaseCalculator.h"
@@ -44,9 +45,6 @@ public:
     // implements Label::Listener
     void labelTextChanged(Label* labelThatHasChanged) override;
 
-    // overrides GenericEditor
-    void sliderEvent(Slider* slider) override;
-
     // update display based on current channel
     void channelChanged(int chan, bool newState) override;
 
@@ -64,16 +62,30 @@ public:
     // display updaters - do not trigger listeners.
     void refreshLowCut();
     void refreshHighCut();
-    void refreshPredLength();
-    void refreshHilbertLength();
     void refreshVisContinuousChan();
 
 private:
 
-    // Utilities for parsing entered values
+    /*
+     * Select a frequency band when loading based on the saved information.
+     * Don't want to use the index in case bands are added/removed in the future (and it's less readable).
+     * Instead, try to match the min and max valid frequencies of the range. If that fails (or if
+     * the rangeMin and rangeMax attributes don't exist), find the band that encompasses lowCut and highCut
+     * and puts them closest to the center. Finally, if all else fails, just return the first band.
+     */
+    static int selectBandFromSavedParams(const XmlElement* xmlNode);
 
+    /*
+     * Tries to read a number of type out from input. Returns false if unsuccessful.
+     * Otherwise, returns true and writes the result to *out.
+     */
     template<typename T>
-    static T fromString(const char* in);
+    static bool readNumber(const String& input, T& out)
+    {
+        std::istringstream istream(input.toStdString());
+        istream >> out;
+        return !istream.fail();
+    }
 
     /* 
      * Return whether the control contained a valid input between min and max, inclusive.
@@ -83,26 +95,19 @@ private:
      * In header to make sure specializations not used in PhaseCalculatorEditor.cpp
      * are still available to other translation units.
      */
-
     template<typename Ctrl, typename T>
     static bool updateControl(Ctrl* c, const T min, const T max,
-        const T defaultValue, T* out)
+        const T defaultValue, T& out)
     {
-        T parsedVal;
-        try
+        if (readNumber(c->getText(), out))
         {
-            parsedVal = fromString<T>(c->getText().toRawUTF8());
-        }
-        catch (const std::logic_error&)
-        {
-            c->setText(String(defaultValue), dontSendNotification);
-            return false;
+            out = jmax(min, jmin(max, out));
+            c->setText(String(out), dontSendNotification);
+            return true;
         }
 
-        *out = jmax(min, jmin(max, parsedVal));
-
-        c->setText(String(*out), dontSendNotification);
-        return true;
+        c->setText(String(defaultValue), dontSendNotification);
+        return false;
     }
 
     // keep track of the record status of each "extra" channel
@@ -131,21 +136,16 @@ private:
     int prevExtraChans;
     ExtraChanManager extraChanManager;
 
+    ScopedPointer<Label>    bandLabel;
+    ScopedPointer<ComboBox> bandBox;
+
     ScopedPointer<Label>    lowCutLabel;
     ScopedPointer<Label>    lowCutEditable;
+    ScopedPointer<Label>    lowCutUnit;
+
     ScopedPointer<Label>    highCutLabel;
     ScopedPointer<Label>    highCutEditable;
-    
-    ScopedPointer<Label>    hilbertLengthLabel;
-    ScopedPointer<Label>    hilbertLengthUnitLabel;
-    ScopedPointer<ComboBox> hilbertLengthBox;
-
-    LookAndFeel_V3        v3LookAndFeel;
-    ScopedPointer<Slider> predLengthSlider;
-    ScopedPointer<Label>  pastLengthLabel;
-    ScopedPointer<Label>  pastLengthEditable;
-    ScopedPointer<Label>  predLengthLabel;
-    ScopedPointer<Label>  predLengthEditable;
+    ScopedPointer<Label>    highCutUnit;
 
     ScopedPointer<Label>    recalcIntervalLabel;
     ScopedPointer<Label>    recalcIntervalEditable;
@@ -158,7 +158,9 @@ private:
     ScopedPointer<ComboBox> outputModeBox;
 
     // constants
-
+    const String FREQ_RANGE_TOOLTIP = "Each option corresponds internally to a Hilbert transformer " +
+        String("that is optimized for this frequency range. After selecting a range, you can adjust ") +
+        "'low' and 'high' to filter to any passband within this range.";
     const String HILB_LENGTH_TOOLTIP = "Change the total amount of data used to calculate the phase (powers of 2 are best)";
     const String PRED_LENGTH_TOOLTIP = "Select how much past vs. predicted data to use when calculating the phase";
     const String RECALC_INTERVAL_TOOLTIP = "Time to wait between calls to update the autoregressive models";
