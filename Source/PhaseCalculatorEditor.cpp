@@ -33,7 +33,8 @@ PhaseCalculatorEditor::PhaseCalculatorEditor(PhaseCalculator* parentNode, bool u
     tabText = "Event Phase Plot";
     int filterWidth = 80;
 
-    PhaseCalculator* processor = static_cast<PhaseCalculator*>(parentNode);
+    // make the canvas now, so that restoring its parameters always works.
+    canvas = new PhaseCalculatorCanvas(parentNode);
 
     lowCutLabel = new Label("lowCutL", "Low cut");
     lowCutLabel->setBounds(10, 30, 80, 20);
@@ -45,7 +46,7 @@ PhaseCalculatorEditor::PhaseCalculatorEditor(PhaseCalculator* parentNode, bool u
     lowCutEditable->setEditable(true);
     lowCutEditable->addListener(this);
     lowCutEditable->setBounds(15, 47, 60, 18);
-    lowCutEditable->setText(String(processor->lowCut), dontSendNotification);
+    lowCutEditable->setText(String(parentNode->lowCut), dontSendNotification);
     lowCutEditable->setColour(Label::backgroundColourId, Colours::grey);
     lowCutEditable->setColour(Label::textColourId, Colours::white);
     addAndMakeVisible(lowCutEditable);
@@ -60,7 +61,7 @@ PhaseCalculatorEditor::PhaseCalculatorEditor(PhaseCalculator* parentNode, bool u
     highCutEditable->setEditable(true);
     highCutEditable->addListener(this);
     highCutEditable->setBounds(15, 87, 60, 18);
-    highCutEditable->setText(String(processor->highCut), dontSendNotification);
+    highCutEditable->setText(String(parentNode->highCut), dontSendNotification);
     highCutEditable->setColour(Label::backgroundColourId, Colours::grey);
     highCutEditable->setColour(Label::textColourId, Colours::white);
     addAndMakeVisible(highCutEditable);
@@ -77,7 +78,7 @@ PhaseCalculatorEditor::PhaseCalculatorEditor(PhaseCalculator* parentNode, bool u
     {
         hilbertLengthBox->addItem(String(1 << pow), pow);
     }
-    hilbertLengthBox->setText(String(processor->hilbertLength), dontSendNotification);
+    hilbertLengthBox->setText(String(parentNode->hilbertLength), dontSendNotification);
     hilbertLengthBox->setTooltip(HILB_LENGTH_TOOLTIP);
     hilbertLengthBox->setBounds(filterWidth + 10, 45, 80, 20);
     hilbertLengthBox->addListener(this);
@@ -106,7 +107,7 @@ PhaseCalculatorEditor::PhaseCalculatorEditor(PhaseCalculator* parentNode, bool u
     pastLengthEditable = new Label("pastLengthE");
     pastLengthEditable->setEditable(true);
     pastLengthEditable->addListener(this);
-    pastLengthEditable->setText(String(processor->hilbertLength - processor->predictionLength), dontSendNotification);
+    pastLengthEditable->setText(String(parentNode->hilbertLength - parentNode->predictionLength), dontSendNotification);
     pastLengthEditable->setBounds(filterWidth + 8, 102, 60, 18);
     pastLengthEditable->setColour(Label::backgroundColourId, Colours::grey);
     pastLengthEditable->setColour(Label::textColourId, Colours::white);
@@ -115,7 +116,7 @@ PhaseCalculatorEditor::PhaseCalculatorEditor(PhaseCalculator* parentNode, bool u
     predLengthEditable = new Label("predLengthE");
     predLengthEditable->setEditable(true);
     predLengthEditable->addListener(this);
-    predLengthEditable->setText(String(processor->predictionLength), dontSendNotification);
+    predLengthEditable->setText(String(parentNode->predictionLength), dontSendNotification);
     predLengthEditable->setBounds(filterWidth + 70, 102, 60, 18);
     predLengthEditable->setColour(Label::backgroundColourId, Colours::grey);
     predLengthEditable->setColour(Label::textColourId, Colours::white);
@@ -131,8 +132,8 @@ PhaseCalculatorEditor::PhaseCalculatorEditor(PhaseCalculator* parentNode, bool u
     predLengthSlider->setColour(Slider::backgroundColourId, Colour(51, 102, 255));
     predLengthSlider->setTooltip(PRED_LENGTH_TOOLTIP);
     predLengthSlider->addListener(this);
-    predLengthSlider->setRange(0, processor->hilbertLength, 1);
-    predLengthSlider->setValue(processor->hilbertLength - processor->predictionLength, dontSendNotification);
+    predLengthSlider->setRange(0, parentNode->hilbertLength, 1);
+    predLengthSlider->setValue(parentNode->hilbertLength - parentNode->predictionLength, dontSendNotification);
     addAndMakeVisible(predLengthSlider);
 
     recalcIntervalLabel = new Label("recalcL", "AR Refresh:");
@@ -147,7 +148,7 @@ PhaseCalculatorEditor::PhaseCalculatorEditor(PhaseCalculator* parentNode, bool u
     recalcIntervalEditable->setBounds(filterWidth + 145, 44, 55, 18);
     recalcIntervalEditable->setColour(Label::backgroundColourId, Colours::grey);
     recalcIntervalEditable->setColour(Label::textColourId, Colours::white);
-    recalcIntervalEditable->setText(String(processor->calcInterval), dontSendNotification);
+    recalcIntervalEditable->setText(String(parentNode->calcInterval), dontSendNotification);
     recalcIntervalEditable->setTooltip(RECALC_INTERVAL_TOOLTIP);
     addAndMakeVisible(recalcIntervalEditable);
 
@@ -169,7 +170,7 @@ PhaseCalculatorEditor::PhaseCalculatorEditor(PhaseCalculator* parentNode, bool u
     arOrderEditable->setBounds(filterWidth + 195, 66, 25, 18);
     arOrderEditable->setColour(Label::backgroundColourId, Colours::grey);
     arOrderEditable->setColour(Label::textColourId, Colours::white);
-    arOrderEditable->setText(String(processor->arOrder), sendNotificationAsync);
+    arOrderEditable->setText(String(parentNode->arOrder), sendNotificationAsync);
     arOrderEditable->setTooltip(AR_ORDER_TOOLTIP);
     addAndMakeVisible(arOrderEditable);
 
@@ -184,7 +185,7 @@ PhaseCalculatorEditor::PhaseCalculatorEditor(PhaseCalculator* parentNode, bool u
     outputModeBox->addItem("MAG", MAG);
     outputModeBox->addItem("PH+MAG", PH_AND_MAG);
     outputModeBox->addItem("IMAG", IM);
-    outputModeBox->setSelectedId(processor->outputMode);
+    outputModeBox->setSelectedId(parentNode->outputMode);
     outputModeBox->setTooltip(OUTPUT_MODE_TOOLTIP);
     outputModeBox->setBounds(filterWidth + 145, 105, 76, 19);
     outputModeBox->addListener(this);
@@ -369,7 +370,6 @@ void PhaseCalculatorEditor::stopAcquisition()
 
 Visualizer* PhaseCalculatorEditor::createNewCanvas()
 {
-    canvas = new PhaseCalculatorCanvas(static_cast<PhaseCalculator*>(getProcessor()));
     return canvas;
 }
 
