@@ -35,7 +35,8 @@ PhaseCalculatorEditor::PhaseCalculatorEditor(PhaseCalculator* parentNode, bool u
     tabText = "Event Phase Plot";
     int filterWidth = 120;
 
-    PhaseCalculator* processor = static_cast<PhaseCalculator*>(parentNode);
+    // make the canvas now, so that restoring its parameters always works.
+    canvas = new PhaseCalculatorCanvas(parentNode);
 
     bandLabel = new Label("bandL", "Freq range:");
     bandLabel->setBounds(5, 25, 100, 20);
@@ -48,7 +49,7 @@ PhaseCalculatorEditor::PhaseCalculatorEditor(PhaseCalculator* parentNode, bool u
     {
         bandBox->addItem(Hilbert::BAND_NAME.at(b), b + 1);
     }
-    bandBox->setSelectedId(processor->band + 1);
+    bandBox->setSelectedId(parentNode->band + 1);
     bandBox->setTooltip(FREQ_RANGE_TOOLTIP);
     bandBox->setBounds(7, 42, 110, 20);
     bandBox->addListener(this);
@@ -64,7 +65,7 @@ PhaseCalculatorEditor::PhaseCalculatorEditor(PhaseCalculator* parentNode, bool u
     lowCutEditable->setEditable(true);
     lowCutEditable->addListener(this);
     lowCutEditable->setBounds(50, 70, 35, 18);
-    lowCutEditable->setText(String(processor->lowCut), dontSendNotification);
+    lowCutEditable->setText(String(parentNode->lowCut), dontSendNotification);
     lowCutEditable->setColour(Label::backgroundColourId, Colours::grey);
     lowCutEditable->setColour(Label::textColourId, Colours::white);
     addAndMakeVisible(lowCutEditable);
@@ -85,7 +86,7 @@ PhaseCalculatorEditor::PhaseCalculatorEditor(PhaseCalculator* parentNode, bool u
     highCutEditable->setEditable(true);
     highCutEditable->addListener(this);
     highCutEditable->setBounds(50, 100, 35, 18);
-    highCutEditable->setText(String(processor->highCut), dontSendNotification);
+    highCutEditable->setText(String(parentNode->highCut), dontSendNotification);
     highCutEditable->setColour(Label::backgroundColourId, Colours::grey);
     highCutEditable->setColour(Label::textColourId, Colours::white);
     addAndMakeVisible(highCutEditable);
@@ -108,7 +109,7 @@ PhaseCalculatorEditor::PhaseCalculatorEditor(PhaseCalculator* parentNode, bool u
     recalcIntervalEditable->setBounds(filterWidth + 5, 44, 55, 18);
     recalcIntervalEditable->setColour(Label::backgroundColourId, Colours::grey);
     recalcIntervalEditable->setColour(Label::textColourId, Colours::white);
-    recalcIntervalEditable->setText(String(processor->calcInterval), dontSendNotification);
+    recalcIntervalEditable->setText(String(parentNode->calcInterval), dontSendNotification);
     recalcIntervalEditable->setTooltip(RECALC_INTERVAL_TOOLTIP);
     addAndMakeVisible(recalcIntervalEditable);
 
@@ -130,7 +131,7 @@ PhaseCalculatorEditor::PhaseCalculatorEditor(PhaseCalculator* parentNode, bool u
     arOrderEditable->setBounds(filterWidth + 55, 66, 25, 18);
     arOrderEditable->setColour(Label::backgroundColourId, Colours::grey);
     arOrderEditable->setColour(Label::textColourId, Colours::white);
-    arOrderEditable->setText(String(processor->arOrder), sendNotificationAsync);
+    arOrderEditable->setText(String(parentNode->arOrder), sendNotificationAsync);
     arOrderEditable->setTooltip(AR_ORDER_TOOLTIP);
     addAndMakeVisible(arOrderEditable);
 
@@ -145,7 +146,7 @@ PhaseCalculatorEditor::PhaseCalculatorEditor(PhaseCalculator* parentNode, bool u
     outputModeBox->addItem("MAG", MAG);
     outputModeBox->addItem("PH+MAG", PH_AND_MAG);
     outputModeBox->addItem("IMAG", IM);
-    outputModeBox->setSelectedId(processor->outputMode);
+    outputModeBox->setSelectedId(parentNode->outputMode);
     outputModeBox->setTooltip(OUTPUT_MODE_TOOLTIP);
     outputModeBox->setBounds(filterWidth + 5, 105, 76, 19);
     outputModeBox->addListener(this);
@@ -278,7 +279,6 @@ void PhaseCalculatorEditor::stopAcquisition()
 
 Visualizer* PhaseCalculatorEditor::createNewCanvas()
 {
-    canvas = new PhaseCalculatorCanvas(static_cast<PhaseCalculator*>(getProcessor()));
     return canvas;
 }
 
