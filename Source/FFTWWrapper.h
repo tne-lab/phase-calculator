@@ -29,180 +29,189 @@ transform library
 #ifndef FFTW_WRAPPER_H_INCLUDED
 #define FFTW_WRAPPER_H_INCLUDED
 
-#include <JuceHeader.h> // assertions, etc.
-#include <fftw3.h>      // Fast Fourier Transform library
+#include <BasicJuceHeader.h> // assertions, etc.
+#include <fftw3.h>           // Fast Fourier Transform library
 #include <complex>
-#include <algorithm>    // reverse array
+#include <algorithm>         // reverse array
 
-/*
-FFTW-friendly array that can hold complex or real doubles.
-*/
-class FFTWArray
+namespace PhaseCalculator
 {
-public:
-    // creation / deletion
-    FFTWArray(int complexLen)
+    /*
+    FFTW-friendly array that can hold complex or real doubles.
+    */
+    class FFTWArray
     {
-        jassert(complexLen >= 0);
-        length = complexLen;
-        data = reinterpret_cast<std::complex<double>*>(fftw_alloc_complex(complexLen));
-    }
-
-    ~FFTWArray()
-    {
-        fftw_free(data);
-    }
-
-    void resize(int newLength)
-    {
-        jassert(newLength >= 0);
-        if (newLength != length)
+    public:
+        // creation / deletion
+        FFTWArray(int complexLen = 0)
         {
-            length = newLength;
+            jassert(complexLen >= 0);
+            length = complexLen;
+            data = reinterpret_cast<std::complex<double>*>(fftw_alloc_complex(complexLen));
+        }
+
+        ~FFTWArray()
+        {
             fftw_free(data);
-            data = reinterpret_cast<std::complex<double>*>(fftw_alloc_complex(newLength));
         }
-    }
 
-    std::complex<double> getAsComplex(int i)
-    {
-        jassert(i >= 0 && i < length);
-        return data[i];
-    }
-
-    double getAsReal(int i)
-    {
-        jassert(i >= 0 && i < length * 2);
-        return reinterpret_cast<double*>(data)[i];
-    }
-
-    std::complex<double>* getComplexPointer(int index = 0)
-    {
-        if (index < length && index >= 0)
+        void resize(int newLength)
         {
-            return data + index;
+            jassert(newLength >= 0);
+            if (newLength != length)
+            {
+                length = newLength;
+                fftw_free(data);
+                data = reinterpret_cast<std::complex<double>*>(fftw_alloc_complex(newLength));
+            }
         }
-        return nullptr;
-    }
 
-    double* getRealPointer(int index = 0)
-    {
-        if (index < length * 2 && index >= 0)
+        std::complex<double> getAsComplex(int i)
         {
-            return reinterpret_cast<double*>(data)+index;
+            jassert(i >= 0 && i < length);
+            return data[i];
         }
-        return nullptr;
-    }
 
-    int getLength()
-    {
-        return length;
-    }
-
-    // modification
-    void set(int i, std::complex<double> val)
-    {
-        jassert(i >= 0 && i < length);
-        data[i] = val;
-    }
-
-    void set(int i, double val)
-    {
-        jassert(i >= 0 && i < length * 2);
-        reinterpret_cast<double*>(data)[i] = val;
-    }
-
-    // Reverses first reverseLength complex values (default = all)
-    void reverseComplex(int reverseLength = -1)
-    {
-        reverseLength = reverseLength >= 0 ? reverseLength : length;
-        std::complex<double>* first = data;
-        std::complex<double>* last = data + reverseLength;
-        std::reverse<std::complex<double>*>(first, last);
-    }
-
-    // Reverses first reverseLength real values (default = all)
-    void reverseReal(int reverseLength = -1)
-    {
-        reverseLength = reverseLength >= 0 ? reverseLength : length * 2;
-        double* first = reinterpret_cast<double*>(data);
-        double* last = first + reverseLength;
-        std::reverse<double*>(first, last);
-    }
-
-    /* Copies up to num elements starting at fromArr to the array starting at startInd.
-     * Returns the number of elements actually copied.
-     */
-    int copyFrom(const std::complex<double>* fromArr, int num, int startInd = 0)
-    {
-        int numToCopy = jmin(num, length - startInd);
-        std::complex<double>* wp = getComplexPointer(startInd);
-        for (int i = 0; i < numToCopy; ++i)
+        double getAsReal(int i)
         {
-            wp[i] = fromArr[i];
+            jassert(i >= 0 && i < length * 2);
+            return reinterpret_cast<double*>(data)[i];
         }
-        
-        return numToCopy;
-    }
 
-    int copyFrom(const double* fromArr, int num, int startInd = 0)
-    {
-        int numToCopy = jmin(num, 2 * length - startInd);
-        double* wpReal = getRealPointer(startInd);
-        for (int i = 0; i < numToCopy; ++i)
+        std::complex<double>* getComplexPointer(int index = 0)
         {
-            wpReal[i] = fromArr[i];
+            if (index < length && index >= 0)
+            {
+                return data + index;
+            }
+            return nullptr;
         }
-        
-        return numToCopy;
-    }
 
-private:
-    std::complex<double>* data;
-    int length;
+        double* getRealPointer(int index = 0)
+        {
+            if (index < length * 2 && index >= 0)
+            {
+                return reinterpret_cast<double*>(data)+index;
+            }
+            return nullptr;
+        }
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FFTWArray);
-};
+        int getLength()
+        {
+            return length;
+        }
 
-class FFTWPlan
-{
-public:
-    // r2c constructor
-    FFTWPlan(int n, FFTWArray* in, FFTWArray* out, unsigned int flags)
+        // modification
+        void set(int i, std::complex<double> val)
+        {
+            jassert(i >= 0 && i < length);
+            data[i] = val;
+        }
+
+        void set(int i, double val)
+        {
+            jassert(i >= 0 && i < length * 2);
+            reinterpret_cast<double*>(data)[i] = val;
+        }
+
+        // Reverses first reverseLength complex values (default = all)
+        void reverseComplex(int reverseLength = -1)
+        {
+            reverseLength = reverseLength >= 0 ? reverseLength : length;
+            std::complex<double>* first = data;
+            std::complex<double>* last = data + reverseLength;
+            std::reverse<std::complex<double>*>(first, last);
+        }
+
+        // Reverses first reverseLength real values (default = all)
+        void reverseReal(int reverseLength = -1)
+        {
+            reverseLength = reverseLength >= 0 ? reverseLength : length * 2;
+            double* first = reinterpret_cast<double*>(data);
+            double* last = first + reverseLength;
+            std::reverse<double*>(first, last);
+        }
+
+        /* Copies up to num elements starting at fromArr to the array starting at startInd.
+        * Returns the number of elements actually copied.
+        */
+        int copyFrom(const std::complex<double>* fromArr, int num, int startInd = 0)
+        {
+            int numToCopy = jmin(num, length - startInd);
+            std::complex<double>* wp = getComplexPointer(startInd);
+            for (int i = 0; i < numToCopy; ++i)
+            {
+                wp[i] = fromArr[i];
+            }
+
+            return numToCopy;
+        }
+
+        int copyFrom(const double* fromArr, int num, int startInd = 0)
+        {
+            int numToCopy = jmin(num, 2 * length - startInd);
+            double* wpReal = getRealPointer(startInd);
+            for (int i = 0; i < numToCopy; ++i)
+            {
+                wpReal[i] = fromArr[i];
+            }
+
+            return numToCopy;
+        }
+
+    private:
+        std::complex<double>* data;
+        int length;
+
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FFTWArray);
+    };
+
+    class FFTWPlan
     {
-        double* ptr_in = in->getRealPointer();
-        fftw_complex* ptr_out = reinterpret_cast<fftw_complex*>(out->getComplexPointer());
-        plan = fftw_plan_dft_r2c_1d(n, ptr_in, ptr_out, flags);
-    }
+    public:
+        // r2c constructor
+        FFTWPlan(int n, FFTWArray* in, FFTWArray* out, unsigned int flags) : length(n)
+        {
+            double* ptr_in = in->getRealPointer();
+            fftw_complex* ptr_out = reinterpret_cast<fftw_complex*>(out->getComplexPointer());
+            plan = fftw_plan_dft_r2c_1d(n, ptr_in, ptr_out, flags);
+        }
 
-    // r2c in-place
-    FFTWPlan(int n, FFTWArray* buf, unsigned int flags) : FFTWPlan(n, buf, buf, flags) {}
+        // r2c in-place
+        FFTWPlan(int n, FFTWArray* buf, unsigned int flags) : FFTWPlan(n, buf, buf, flags) {}
 
-    // c2c constructor
-    FFTWPlan(int n, FFTWArray* in, FFTWArray* out, int sign, unsigned int flags)
-    {
-        fftw_complex* ptr_in = reinterpret_cast<fftw_complex*>(in->getComplexPointer());
-        fftw_complex* ptr_out = reinterpret_cast<fftw_complex*>(out->getComplexPointer());
-        plan = fftw_plan_dft_1d(n, ptr_in, ptr_out, sign, flags);
-    }
+        // c2c constructor
+        FFTWPlan(int n, FFTWArray* in, FFTWArray* out, int sign, unsigned int flags) : length(n)
+        {
+            fftw_complex* ptr_in = reinterpret_cast<fftw_complex*>(in->getComplexPointer());
+            fftw_complex* ptr_out = reinterpret_cast<fftw_complex*>(out->getComplexPointer());
+            plan = fftw_plan_dft_1d(n, ptr_in, ptr_out, sign, flags);
+        }
 
-    // c2c in-place
-    FFTWPlan(int n, FFTWArray* buf, int sign, unsigned int flags) : FFTWPlan(n, buf, buf, sign, flags) {}
+        // c2c in-place
+        FFTWPlan(int n, FFTWArray* buf, int sign, unsigned int flags) : FFTWPlan(n, buf, buf, sign, flags) {}
 
-    ~FFTWPlan()
-    {
-        fftw_destroy_plan(plan);
-    }
+        ~FFTWPlan()
+        {
+            fftw_destroy_plan(plan);
+        }
 
-    void execute()
-    {
-        fftw_execute(plan);
-    }
+        void execute()
+        {
+            fftw_execute(plan);
+        }
 
-private:
-    fftw_plan plan;
+        int getLength()
+        {
+            return length;
+        }
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FFTWPlan);
-};
+    private:
+        fftw_plan plan;
+        const int length;
+
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FFTWPlan);
+    };
+}
 
 #endif // FFTW_WRAPPER_H_INCLUDED

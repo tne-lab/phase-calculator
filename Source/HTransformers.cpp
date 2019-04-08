@@ -23,133 +23,124 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "HTransformers.h"
 
-namespace Hilbert
+namespace PhaseCalculator
 {
     namespace
     {
-        const Array<float> HIGH_GAM_VALID({ 60, 200 });
-        const Array<float> HIGH_GAM_DEFAULT({ 70, 150 });
-        const Array<float> HIGH_GAM_EXTREMA({ 81.6443, 123.1104, 169.3574 });
-        const int HIGH_GAM_DELAY = 3;
-        // from Matlab: firls(6, [60 200]/250, [1 1], 'hilbert')
-        const double HIGH_GAM_TRANSFORMER[HIGH_GAM_DELAY] = {
-            -0.10383410506573287,
-            0.0040553935691102303,
-            -0.59258484603659545
+        /** Helper to allow assigning to each array one band at a time (within the constructor) **/
+        struct HilbertInfo
+        {
+            const String gamma{ L"\u03b3" };
+            const String beta{ L"\u03b2" };
+            const String alphaTheta{ L"\u03b1/\u03b8" };
+
+            String bandName[NUM_BANDS];
+            Array<float> validBand[NUM_BANDS];
+            Array<float> defaultBand[NUM_BANDS];
+            Array<float> extrema[NUM_BANDS];
+            int delay[NUM_BANDS];
+            Array<double> transformer[NUM_BANDS];
+
+            static String validBandToString(const Array<float>& band)
+            {
+                jassert(band.size() == 2);
+                return " (" + String(band[0]) + "-" + String(band[1]) + " Hz)";
+            }
+
+            HilbertInfo()
+            {
+                validBand[ALPHA_THETA] = Array<float>({ 4, 18 });
+                bandName[ALPHA_THETA] = alphaTheta + validBandToString(validBand[ALPHA_THETA]);
+                defaultBand[ALPHA_THETA] = Array<float>({ 4, 8 });
+                extrema[ALPHA_THETA] = Array<float>(/* none */);
+                delay[ALPHA_THETA] = 9;
+                // from Matlab: firpm(18, [4 246]/250, [1 1], 'hilbert')
+                transformer[ALPHA_THETA] = Array<double>({
+                    -0.28757250783614413,
+                    0.000027647225074994485,
+                    -0.094611325643268351,
+                    -0.00025887439499763831,
+                    -0.129436276914844,
+                    -0.0001608427426424053,
+                    -0.21315096860055227,
+                    -0.00055322197399797961,
+                    -0.63685698210351149
+                });
+
+
+                validBand[BETA] = Array<float>({ 10, 40 });
+                bandName[BETA] = beta + validBandToString(validBand[BETA]);
+                defaultBand[BETA] = Array<float>({ 12, 30 });
+                extrema[BETA] = Array<float>({ 21.5848 });
+                delay[BETA] = 9;
+                // from Matlab: firpm(18, [12 30 40 240]/250, [1 1 0.7 0.7], 'hilbert')
+                transformer[BETA] = Array<double>({
+                    -0.099949575596234311,
+                    -0.020761484963254036,
+                    -0.080803573080958854,
+                    -0.027365064225587619,
+                    -0.11114477443975329,
+                    -0.025834076852645271,
+                    -0.16664116044989324,
+                    -0.015661948619847599,
+                    -0.45268524264113719
+                });
+
+
+                validBand[LOW_GAM] = Array<float>({ 30, 55 });
+                bandName[LOW_GAM] = "Lo " + gamma + validBandToString(validBand[LOW_GAM]);
+                defaultBand[LOW_GAM] = Array<float>({ 30, 55 });
+                extrema[LOW_GAM] = Array<float>({ 43.3609 });
+                delay[LOW_GAM] = 2;
+                // from Matlab: firls(4, [30 55]/250, [1 1], 'hilbert')
+                transformer[LOW_GAM] = Array<double>({
+                    -1.5933788446351915,
+                    1.7241339075391682
+                });
+
+
+                validBand[MID_GAM] = Array<float>({ 40, 90 });
+                bandName[MID_GAM] = "Mid " + gamma + validBandToString(validBand[MID_GAM]);
+                defaultBand[MID_GAM] = Array<float>({ 40, 90 });
+                extrema[MID_GAM] = Array<float>({ 64.4559 });
+                delay[MID_GAM] = 2;
+                // from Matlab: firls(4, [35 90]/250, [1 1], 'hilbert')
+                transformer[MID_GAM] = Array<double>({
+                    -0.487176162115735,
+                    -0.069437334858668653
+                });
+
+
+                validBand[HIGH_GAM] = Array<float>({ 60, 200 });
+                bandName[HIGH_GAM] = "Hi " + gamma + validBandToString(validBand[HIGH_GAM]);
+                defaultBand[HIGH_GAM] = Array<float>({ 70, 150 });
+                extrema[HIGH_GAM] = Array<float>({ 81.6443, 123.1104, 169.3574 });
+                delay[HIGH_GAM] = 3;
+                // from Matlab: firls(6, [60 200]/250, [1 1], 'hilbert')
+                transformer[HIGH_GAM] = Array<double>({
+                    -0.10383410506573287,
+                    0.0040553935691102303,
+                    -0.59258484603659545
+                });
+            }
         };
 
-        const Array<float> MID_GAM_VALID({ 40, 90 });
-        const Array<float> MID_GAM_DEFAULT({ 40, 90 });
-        const Array<float> MID_GAM_EXTREMA({ 64.4559 });
-        const int MID_GAM_DELAY = 2;
-        // from Matlab: firls(4, [35 90]/250, [1 1], 'hilbert')
-        const double MID_GAM_TRANSFORMER[MID_GAM_DELAY] = {
-            -0.487176162115735,
-            -0.069437334858668653
-        };
-
-        const Array<float> LOW_GAM_VALID({ 30, 55 });
-        const Array<float> LOW_GAM_DEFAULT({ 30, 55 });
-        const Array<float> LOW_GAM_EXTREMA({ 43.3609 });
-        const int LOW_GAM_DELAY = 2;
-        // from Matlab: firls(4, [30 55]/250, [1 1], 'hilbert')
-        const double LOW_GAM_TRANSFORMER[LOW_GAM_DELAY] = {
-            -1.5933788446351915,
-            1.7241339075391682
-        };
-
-        const Array<float> BETA_VALID({ 10, 40 });
-        const Array<float> BETA_DEFAULT({ 12, 30 });
-        const Array<float> BETA_EXTREMA({ 21.5848 });
-        const int BETA_DELAY = 9;
-        // from Matlab: firpm(18, [12 30 40 240]/250, [1 1 0.7 0.7], 'hilbert')
-        const double BETA_TRANSFORMER[BETA_DELAY] = {
-            -0.099949575596234311,
-            -0.020761484963254036,
-            -0.080803573080958854,
-            -0.027365064225587619,
-            -0.11114477443975329,
-            -0.025834076852645271,
-            -0.16664116044989324,
-            -0.015661948619847599,
-            -0.45268524264113719
-        };
-
-        const Array<float> ALPHA_THETA_VALID({ 4, 18 });
-        const Array<float> ALPHA_THETA_DEFAULT({ 4, 8 });
-        const Array<float> ALPHA_THETA_EXTREMA({ /* none */ });
-        const int ALPHA_THETA_DELAY = 9;
-        // from Matlab: firpm(18, [4 246]/250, [1 1], 'hilbert')
-        const double ALPHA_THETA_TRANSFORMER[ALPHA_THETA_DELAY] = {
-            -0.28757250783614413,
-            0.000027647225074994485,
-            -0.094611325643268351,
-            -0.00025887439499763831,
-            -0.129436276914844,
-            -0.0001608427426424053,
-            -0.21315096860055227,
-            -0.00055322197399797961,
-            -0.63685698210351149
-        };
-
-        const String C_GAMMA{ L"\u03b3" };
-        const String C_BETA{ L"\u03b2" };
-        const String C_ALPHA_THETA{ L"\u03b1/\u03b8" };
+        static const HilbertInfo hilbertInfo; // instantiates all the data through the constructor
     }
 
-    String validBandToString(const Array<float>& band)
+    namespace Hilbert
     {
-        jassert(band.size() == 2);
-        return " (" + String(band[0]) + "-" + String(band[1]) + " Hz)";
+        // exported constants
+        extern const String* const bandName = hilbertInfo.bandName;
+
+        extern const Array<float>* const validBand = hilbertInfo.validBand;
+
+        extern const Array<float>* const defaultBand = hilbertInfo.defaultBand;
+
+        extern const Array<float>* const extrema = hilbertInfo.extrema;
+
+        extern const int* const delay = hilbertInfo.delay;
+
+        extern const Array<double>* const transformer = hilbertInfo.transformer;
     }
-    
-    // exported constants
-
-    extern const std::map<int, String> BAND_NAME = {
-        { HIGH_GAM, "Hi "  + C_GAMMA       + validBandToString(HIGH_GAM_VALID)    },
-        { MID_GAM,  "Mid " + C_GAMMA       + validBandToString(MID_GAM_VALID)     },
-        { LOW_GAM,  "Lo "  + C_GAMMA       + validBandToString(LOW_GAM_VALID)     },
-        { BETA,              C_BETA        + validBandToString(BETA_VALID)        },
-        { ALPHA_THETA,       C_ALPHA_THETA + validBandToString(ALPHA_THETA_VALID) }
-    };
-
-    extern const std::map<int, Array<float>> VALID_BAND = {
-        { HIGH_GAM,    HIGH_GAM_VALID    },
-        { MID_GAM,     MID_GAM_VALID     },
-        { LOW_GAM,     LOW_GAM_VALID     },
-        { BETA,        BETA_VALID        },
-        { ALPHA_THETA, ALPHA_THETA_VALID }
-    };
-
-    extern const std::map<int, Array<float>> DEFAULT_BAND = {
-        { HIGH_GAM,    HIGH_GAM_DEFAULT    },
-        { MID_GAM,     MID_GAM_DEFAULT     },
-        { LOW_GAM,     LOW_GAM_DEFAULT     },
-        { BETA,        BETA_DEFAULT        },
-        { ALPHA_THETA, ALPHA_THETA_DEFAULT }
-    };
-
-    extern const std::map<int, Array<float>> EXTREMA = {
-        { HIGH_GAM,    HIGH_GAM_EXTREMA    },
-        { MID_GAM,     MID_GAM_EXTREMA     },
-        { LOW_GAM,     LOW_GAM_EXTREMA     },
-        { BETA,        BETA_EXTREMA        },
-        { ALPHA_THETA, ALPHA_THETA_EXTREMA }
-    };
-
-    extern const std::map<int, int> DELAY = {
-        { HIGH_GAM,    HIGH_GAM_DELAY    },
-        { MID_GAM,     MID_GAM_DELAY     },
-        { LOW_GAM,     LOW_GAM_DELAY     },
-        { BETA,        BETA_DELAY        },
-        { ALPHA_THETA, ALPHA_THETA_DELAY }
-    };
-
-    extern const std::map<int, const double*> TRANSFORMER = {
-        { HIGH_GAM,    HIGH_GAM_TRANSFORMER    },
-        { MID_GAM,     MID_GAM_TRANSFORMER     },
-        { LOW_GAM,     LOW_GAM_TRANSFORMER     },
-        { BETA,        BETA_TRANSFORMER        },
-        { ALPHA_THETA, ALPHA_THETA_TRANSFORMER }
-    };
 }

@@ -50,7 +50,7 @@ extern "C" EXPORT int getPluginInfo(int index, Plugin::PluginInfo* info)
         info->type = Plugin::PLUGIN_TYPE_PROCESSOR;
         info->processor.name = "Phase Calculator";
         info->processor.type = Plugin::FilterProcessor;
-        info->processor.creator = &(Plugin::createProcessor<PhaseCalculator>);
+        info->processor.creator = &(Plugin::createProcessor<PhaseCalculator::Node>);
         break;
 
     default:
