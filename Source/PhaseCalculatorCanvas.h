@@ -27,6 +27,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "PhaseCalculator.h"
 #include <VisualizerWindowHeaders.h>
 #include <set> // std::multiset
+#include <functional>
 
 namespace PhaseCalculator
 {
@@ -69,19 +70,7 @@ namespace PhaseCalculator
         static const int textBoxSize = 50;
 
     private:
-        struct circularBinComparator
-        {
-            circularBinComparator(int numBinsIn, double referenceAngleIn);
-
-            // Depending on numBins and reference, returns true iff lhs belongs in a lower bin than rhs.
-            bool operator() (const double& lhs, const double& rhs) const;
-
-        private:
-            int numBins;
-            double referenceAngle;
-        };
-
-        class AngleDataMultiset : public std::multiset<double, circularBinComparator>
+        class AngleDataMultiset : public std::multiset<double, std::function<bool(double, double)>>
         {
         public:
             // create empty multiset
@@ -89,6 +78,9 @@ namespace PhaseCalculator
 
             // copy nodes from dataSource to newly constructed multiset
             AngleDataMultiset(int numBins, double referenceAngle, AngleDataMultiset* dataSource);
+
+        private:
+            static bool circularBinCompare(int numBins, double referenceAngle, double lhs, double rhs);
         };
 
         // make binMidpoints and segmentAngles reflect current numBins
@@ -117,9 +109,6 @@ namespace PhaseCalculator
 
         // sum of exp(a*j) for each angle a
         std::complex<double> rSum;
-
-        static const double pi;
-        static const float piF;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RosePlot);
     };
@@ -170,6 +159,9 @@ namespace PhaseCalculator
         int getContentWidth(int width, int diameter, int* leftPadding);
 
         Node* processor;
+
+        // to swap with the queue of phases from the Node
+        std::queue<double> tempPhaseBuffer;
 
         ScopedPointer<Viewport>  viewport;
         ScopedPointer<Component> canvas;

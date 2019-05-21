@@ -78,7 +78,7 @@
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>libfftw3-3.lib;DspLib.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>libfftw3-3.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\..\..\..\Resources\windows-libs\FFTW\lib\x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PreBuildEvent />
@@ -93,7 +93,7 @@
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>libfftw3-3.lib;DspLib.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>libfftw3-3.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\..\..\..\Resources\windows-libs\FFTW\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PreBuildEvent />
@@ -112,7 +112,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>libfftw3-3.lib;DspLib.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>libfftw3-3.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\..\..\..\Resources\windows-libs\FFTW\lib\x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PreBuildEvent />
@@ -131,7 +131,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>libfftw3-3.lib;DspLib.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>libfftw3-3.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\..\..\..\Resources\windows-libs\FFTW\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PreBuildEvent />
@@ -139,18 +139,18 @@
     <PostBuildEvent />
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\..\..\Source\Plugins\PhaseCalculator\ar\burg.cpp" />
+    <ClCompile Include="..\..\..\..\Source\Plugins\PhaseCalculator\HTransformers.cpp" />
     <ClCompile Include="..\..\..\..\Source\Plugins\PhaseCalculator\OpenEphysLib.cpp" />
     <ClCompile Include="..\..\..\..\Source\Plugins\PhaseCalculator\PhaseCalculator.cpp" />
     <ClCompile Include="..\..\..\..\Source\Plugins\PhaseCalculator\PhaseCalculatorCanvas.cpp" />
     <ClCompile Include="..\..\..\..\Source\Plugins\PhaseCalculator\PhaseCalculatorEditor.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\..\..\Source\Plugins\PhaseCalculator\ar\burg.h" />
-    <ClInclude Include="..\..\..\..\Source\Plugins\PhaseCalculator\FFTWWrapper.h" />
+    <ClInclude Include="..\..\..\..\Source\Plugins\PhaseCalculator\ARModeler.h" />
     <ClInclude Include="..\..\..\..\Source\Plugins\PhaseCalculator\PhaseCalculator.h" />
     <ClInclude Include="..\..\..\..\Source\Plugins\PhaseCalculator\PhaseCalculatorCanvas.h" />
     <ClInclude Include="..\..\..\..\Source\Plugins\PhaseCalculator\PhaseCalculatorEditor.h" />
+    <ClInclude Include="..\..\..\..\Source\Plugins\PhaseCalculator\HTransformers.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

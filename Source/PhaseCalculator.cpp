@@ -92,8 +92,11 @@ namespace PhaseCalculator
 
         for (int nLeft = nToAdd; nLeft > 0; --nLeft)
         {
-            data[headOffset] = double(*(source++));
-            headOffset = (headOffset ? headOffset : length) - 1;
+            data[headOffset--] = double(*(source++));
+            if (headOffset < 0)
+            {
+                headOffset = length - 1;
+            }
         }
 
         freeSpace = jmax(0, freeSpace - nToAdd);
@@ -152,13 +155,14 @@ namespace PhaseCalculator
         history.resetAndResize(newHistorySize);
 
         // set filter parameters
-        Dsp::Params params;
-        params[0] = chanInfo.sampleRate; // sample rate
-        params[1] = 2;                          // order
-        params[2] = (highCut + lowCut) / 2;     // center frequency
-        params[3] = highCut - lowCut;           // bandwidth
-
-        filter.setParams(params);
+        for (auto filt : { &filter, &reverseFilter })
+        {
+            filt->setup(
+                2,                      // order
+                chanInfo.sampleRate,    // sample rate
+                (highCut + lowCut) / 2, // center frequency
+                highCut - lowCut);      // bandwidth
+        }
 
         arModeler.setParams(arOrder, newHistorySize, chanInfo.dsFactor);
 
@@ -166,16 +170,7 @@ namespace PhaseCalculator
 
         // visualization stuff
         hilbertLengthMultiplier = Hilbert::fs * chanInfo.dsFactor / 1000;
-        int visHilbertLength = visHilbertLengthMs * hilbertLengthMultiplier;
-
-        if (visHilbertBuffer.getLength() != visHilbertLength)
-        {
-            visHilbertBuffer.resize(visHilbertLength);
-            visForwardPlan = new FFTWPlan(visHilbertLength, &visHilbertBuffer, FFTW_MEASURE);
-            visBackwardPlan = new FFTWPlan(visHilbertLength, &visHilbertBuffer, FFTW_BACKWARD, FFTW_MEASURE);
-        }
-
-        reverseFilter.setParams(params);
+        visHilbertBuffer.resize(visHilbertLengthMs * hilbertLengthMultiplier);
 
         reset();
     }
@@ -186,8 +181,9 @@ namespace PhaseCalculator
         filter.reset();
         arModeler.reset();
         FloatVectorOperations::clear(htState.begin(), htState.size());
-        dsOffset = chanInfo.dsFactor;
-        lastComputedSample = 0;
+        interpCountdown = 0;
+        lastComputedPhase = 0;
+        lastComputedMag = 0;
         lastPhase = 0;
     }
 
@@ -412,11 +408,12 @@ namespace PhaseCalculator
 
                 double* pPredSamps = predSamps.getRawDataPointer();
                 const double* pLocalParam = localARParams.getRawDataPointer();
-                arPredict(acInfo->history, acInfo->dsOffset, pPredSamps, pLocalParam, htDelay + 1, stride, arOrder);
+                arPredict(acInfo->history, acInfo->interpCountdown, pPredSamps, pLocalParam,
+                    htDelay + 1, stride, arOrder);
 
                 // identify indices of current buffer to execute HT
                 htInds.clearQuick();
-                for (int i = stride - acInfo->dsOffset; i < nSamples; i += stride)
+                for (int i = acInfo->interpCountdown; i < nSamples; i += stride)
                 {
                     htInds.add(i);
                 }
@@ -466,81 +463,73 @@ namespace PhaseCalculator
                     wpOut2 = buffer.getWritePointer(outChan2);
                 }
 
-                kOut = 0;
-                std::complex<double> prevCS = acInfo->lastComputedSample;
-                std::complex<double> nextCS = htOutput[kOut];
-                double prevPhase, nextPhase, phaseSpan, thisPhase;
-                double prevMag, nextMag, magSpan, thisMag;
+                double nextComputedPhase, phaseStep;
+                double nextComputedMag, magStep;
                 bool needPhase = outputMode != MAG;
                 bool needMag = outputMode != PH;
 
                 if (needPhase)
                 {
-                    prevPhase = std::arg(prevCS);
-                    nextPhase = std::arg(nextCS);
-                    phaseSpan = circDist(nextPhase, prevPhase, Dsp::doublePi);
+                    nextComputedPhase = std::arg(htOutput[0]);
+                    phaseStep = circDist(nextComputedPhase, acInfo->lastComputedPhase, Dsp::doublePi) / stride;
                 }
                 if (needMag)
                 {
-                    prevMag = std::abs(prevCS);
-                    nextMag = std::abs(nextCS);
-                    magSpan = nextMag - prevMag;
+                    nextComputedMag = std::abs(htOutput[0]);
+                    magStep = (nextComputedMag - acInfo->lastComputedMag) / stride;
                 }
-                int subSample = acInfo->dsOffset % stride;
 
-                for (int i = 0; i < nSamples; ++i, subSample = (subSample + 1) % stride)
+                for (int i = 0, frame = 0; i < nSamples; ++i, --acInfo->interpCountdown)
                 {
-                    if (subSample == 0)
+                    if (acInfo->interpCountdown == 0)
                     {
                         // update interpolation frame
-                        prevCS = nextCS;
-                        nextCS = htOutput[++kOut];
+                        ++frame;
+                        acInfo->interpCountdown = stride;
 
                         if (needPhase)
                         {
-                            prevPhase = nextPhase;
-                            nextPhase = std::arg(nextCS);
-                            phaseSpan = circDist(nextPhase, prevPhase, Dsp::doublePi);
+                            acInfo->lastComputedPhase = nextComputedPhase;
+                            nextComputedPhase = std::arg(htOutput[frame]);
+                            phaseStep = circDist(nextComputedPhase, acInfo->lastComputedPhase, Dsp::doublePi) / stride;
                         }
                         if (needMag)
                         {
-                            prevMag = nextMag;
-                            nextMag = std::abs(nextCS);
-                            magSpan = nextMag - prevMag;
+                            acInfo->lastComputedMag = nextComputedMag;
+                            nextComputedMag = std::abs(htOutput[frame]);
+                            magStep = (nextComputedMag - acInfo->lastComputedMag) / stride;
                         }
                     }
 
+                    double thisPhase, thisMag;
                     if (needPhase)
                     {
-                        thisPhase = prevPhase + phaseSpan * subSample / stride;
-                        thisPhase = circDist(thisPhase, 0, Dsp::doublePi);
+                        thisPhase = circDist(nextComputedPhase, phaseStep * acInfo->interpCountdown, Dsp::doublePi);
                     }
                     if (needMag)
                     {
-                        thisMag = prevMag + magSpan * subSample / stride;
+                        thisMag = nextComputedMag - magStep * acInfo->interpCountdown;
                     }
 
                     switch (outputMode)
                     {
                     case MAG:
-                        wpOut[i] = static_cast<float>(thisMag);
+                        wpOut[i] = float(thisMag);
                         break;
 
                     case PH_AND_MAG:
-                        wpOut2[i] = static_cast<float>(thisMag);
+                        wpOut2[i] = float(thisMag);
                         // fall through
                     case PH:
                         // output in degrees
-                        wpOut[i] = static_cast<float>(thisPhase * (180.0 / Dsp::doublePi));
+                        wpOut[i] = float(thisPhase * (180.0 / Dsp::doublePi));
                         break;
 
                     case IM:
-                        wpOut[i] = static_cast<float>(thisMag * std::sin(thisPhase));
+                        wpOut[i] = float(thisMag * std::sin(thisPhase));
                         break;
                     }
                 }
-                acInfo->lastComputedSample = prevCS;
-                acInfo->dsOffset = ((acInfo->dsOffset + nSamples - 1) % stride) + 1;
 
                 // unwrapping / smoothing
                 if (outputMode == PH || outputMode == PH_AND_MAG)
@@ -756,10 +745,20 @@ namespace PhaseCalculator
         return band;
     }
 
-    std::queue<double>& Node::getVisPhaseBuffer(ScopedPointer<ScopedLock>& lock)
+    bool Node::tryToReadVisPhases(std::queue<double>& other)
     {
-        lock = new ScopedLock(visPhaseBufferCS);
-        return visPhaseBuffer;
+        const ScopedTryLock lock(visPhaseBufferCS);
+        if (!lock.isLocked())
+        {
+            return false;
+        }
+
+        while (!visPhaseBuffer.empty())
+        {
+            other.push(visPhaseBuffer.front());
+            visPhaseBuffer.pop();
+        }
+        return true;
     }
 
     void Node::saveCustomChannelParametersToXml(XmlElement* channelElement,
@@ -1191,9 +1190,8 @@ namespace PhaseCalculator
             // un-reverse values
             acInfo->visHilbertBuffer.reverseReal(hilbertLength);
 
-            acInfo->visForwardPlan->execute();
-            hilbertManip(&acInfo->visHilbertBuffer, hilbertLength);
-            acInfo->visBackwardPlan->execute();
+            // Hilbert transform!
+            acInfo->visHilbertBuffer.hilbert();
 
             juce::int64 ts;
             ScopedLock phaseBufferLock(visPhaseBufferCS);
@@ -1268,12 +1266,12 @@ namespace PhaseCalculator
         channelInfo.getUnchecked(chan)->deactivate();
     }
 
-    void Node::arPredict(const ReverseStack& history, int dsOffset, double* prediction,
+    void Node::arPredict(const ReverseStack& history, int interpCountdown, double* prediction,
         const double* params, int samps, int stride, int order)
     {
         const double* rpHistory = history.begin();
         int histSize = history.size();
-        int histStart = history.getHeadOffset() + dsOffset;
+        int histStart = history.getHeadOffset() + stride - interpCountdown;
 
         // s = index to write output
         for (int s = 0; s < samps; ++s)
@@ -1290,34 +1288,6 @@ namespace PhaseCalculator
                 prediction[s] -= params[p] * pastSamp;
             }
         }
-    }
-
-    void Node::hilbertManip(FFTWArray* fftData, int n)
-    {
-        jassert(fftData->getLength() >= n);
-
-        // Normalize DC and Nyquist, normalize and double positive freqs, and set negative freqs to 0.
-        int lastPosFreq = (n + 1) / 2 - 1;
-        int firstNegFreq = n / 2 + 1;
-        int numPosNegFreqDoubles = lastPosFreq * 2; // sizeof(complex<double>) = 2 * sizeof(double)
-        bool hasNyquist = (n % 2 == 0);
-
-        std::complex<double>* wp = fftData->getComplexPointer();
-
-        // normalize but don't double DC value
-        wp[0] /= n;
-
-        // normalize and double positive frequencies
-        FloatVectorOperations::multiply(reinterpret_cast<double*>(wp + 1), 2.0 / n, numPosNegFreqDoubles);
-
-        if (hasNyquist)
-        {
-            // normalize but don't double Nyquist frequency
-            wp[lastPosFreq + 1] /= n;
-        }
-
-        // set negative frequencies to 0
-        FloatVectorOperations::clear(reinterpret_cast<double*>(wp + firstNegFreq), numPosNegFreqDoubles);
     }
 
     double Node::getScaleFactor(Band band, double lowCut, double highCut)

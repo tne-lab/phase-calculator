@@ -132,6 +132,8 @@ namespace PhaseCalculator
         void reallocateStorage()
         {
             j_h.resize(arOrder - 1);
+            j_per.resize(stridedLength);
+            j_pef.resize(stridedLength);
             j_coef_temp.resize(arOrder);
             coefficients.resize(arOrder);
             resetPredictionError();
@@ -139,10 +141,8 @@ namespace PhaseCalculator
 
         void resetPredictionError()
         {
-            j_per.clearQuick();
-            j_per.insertMultiple(0, 0, stridedLength);
-            j_pef.clearQuick();
-            j_pef.insertMultiple(0, 0, stridedLength);
+            FloatVectorOperations::clear(j_per.begin(), stridedLength);
+            FloatVectorOperations::clear(j_pef.begin(), stridedLength);
         }
 
         static int calcStridedLength(int inputLength, int stride)

@@ -234,13 +234,14 @@ namespace PhaseCalculator
         }
 
         // get new angles from visualization phase buffer
-        ScopedPointer<ScopedLock> bufferLock;
-        std::queue<double>& buffer = processor->getVisPhaseBuffer(bufferLock);
-
-        while (!buffer.empty())
+        if (processor->tryToReadVisPhases(tempPhaseBuffer))
         {
-            addAngle(buffer.front());
-            buffer.pop();
+            // add new angles to rose plot
+            while (!tempPhaseBuffer.empty())
+            {
+                addAngle(tempPhaseBuffer.front());
+                tempPhaseBuffer.pop();
+            }
         }
     }
 
@@ -409,7 +410,7 @@ namespace PhaseCalculator
         g.setFont(Font(textBoxSize / 2, Font::bold));
         for (int i = 0; i < 12; ++i)
         {
-            float juceAngle = i * piF / 6;
+            float juceAngle = i * float_Pi / 6;
             spoke.setEnd(center.getPointOnCircumference(squareSide / 2, juceAngle));
             g.setColour(Colours::lightgrey);
             g.drawLine(spoke);
@@ -520,8 +521,8 @@ namespace PhaseCalculator
 
         double reference = usingReference ? referenceAngle : 0.0;
         // use range of (-90, 270] for ease of use
-        double meanRad = Node::circDist(std::arg(rSum), reference, 3 * pi / 2);
-        return meanRad * 180 / pi;
+        double meanRad = Node::circDist(std::arg(rSum), reference, 3 * double_Pi / 2);
+        return radiansToDegrees(meanRad);
     }
 
     double RosePlot::getCircStd()
@@ -533,7 +534,7 @@ namespace PhaseCalculator
 
         double r = std::abs(rSum) / angleData->size();
         double stdRad = std::sqrt(-2 * std::log(r));
-        return stdRad * 180 / pi;
+        return radiansToDegrees(stdRad);
     }
 
     void RosePlot::labelTextChanged(Label* labelThatHasChanged)
@@ -541,15 +542,15 @@ namespace PhaseCalculator
         if (labelThatHasChanged->getName() == "referenceEditable")
         {
             double doubleInput;
-            double currReferenceDeg = referenceAngle * 180.0 / pi;
+            double currReferenceDeg = radiansToDegrees(referenceAngle);
             bool valid = Editor::updateControl(labelThatHasChanged,
                 -DBL_MAX, DBL_MAX, currReferenceDeg, doubleInput);
 
             if (valid)
             {
                 // convert to radians
-                double newReference = Node::circDist(doubleInput * pi / 180.0, 0.0);
-                labelThatHasChanged->setText(String(newReference * 180.0 / pi), dontSendNotification);
+                double newReference = Node::circDist(degreesToRadians(doubleInput), 0.0);
+                labelThatHasChanged->setText(String(radiansToDegrees(newReference)), dontSendNotification);
                 setReference(newReference);
                 canvas->updateStatLabels();
             }
@@ -558,32 +559,27 @@ namespace PhaseCalculator
 
 
     /*** RosePlot private members ***/
-    const double RosePlot::pi = 4 * std::atan(1.0);
-    const float RosePlot::piF = 4 * std::atan(1.0f);
 
-    RosePlot::circularBinComparator::circularBinComparator(int numBinsIn, double referenceAngleIn)
-        : numBins(numBinsIn)
-        , referenceAngle(referenceAngleIn)
+    RosePlot::AngleDataMultiset::AngleDataMultiset(int numBins, double referenceAngle)
+        : std::multiset<double, std::function<bool(double, double)>>(
+        std::bind(circularBinCompare, numBins, referenceAngle, std::placeholders::_1, std::placeholders::_2))
     {}
 
-    bool RosePlot::circularBinComparator::operator() (const double& lhs, const double& rhs) const
+    RosePlot::AngleDataMultiset::AngleDataMultiset(int numBins, double referenceAngle, AngleDataMultiset* dataSource)
+        : AngleDataMultiset(numBins, referenceAngle)
+    {
+        insert(dataSource->begin(), dataSource->end());
+    }
+
+
+    bool RosePlot::AngleDataMultiset::circularBinCompare(int numBins, double referenceAngle, double lhs, double rhs)
     {
         double lhsDist = Node::circDist(lhs, referenceAngle);
         double rhsDist = Node::circDist(rhs, referenceAngle);
-        int lhsBin = static_cast<int>(std::floor(lhsDist * numBins / (2 * pi)));
-        int rhsBin = static_cast<int>(std::floor(rhsDist * numBins / (2 * pi)));
+        int lhsBin = int(lhsDist * numBins / (2 * double_Pi));
+        int rhsBin = int(rhsDist * numBins / (2 * double_Pi));
         return lhsBin < rhsBin;
     }
-
-    RosePlot::AngleDataMultiset::AngleDataMultiset(int numBins, double referenceAngle)
-        : std::multiset<double, circularBinComparator>(circularBinComparator(numBins, referenceAngle))
-    {}
-
-    RosePlot::AngleDataMultiset::AngleDataMultiset(int numBins, double referenceAngle,
-        AngleDataMultiset* dataSource)
-        : std::multiset<double, circularBinComparator>(dataSource->begin(), dataSource->end(),
-        circularBinComparator(numBins, referenceAngle))
-    {}
 
     void RosePlot::reorganizeAngleData()
     {
@@ -604,12 +600,12 @@ namespace PhaseCalculator
 
     void RosePlot::updateAngles()
     {
-        float step = 2 * piF / numBins;
+        float step = 2 * float_Pi / numBins;
         binMidpoints.resize(numBins);
         for (int i = 0; i < numBins; ++i)
         {
             binMidpoints.set(i, step * (i + 0.5));
-            float firstAngle = static_cast<float>(Node::circDist(pi / 2, step * (i + 1)));
+            float firstAngle = float(Node::circDist(double_Pi / 2, step * (i + 1)));
             segmentAngles.set(i, { firstAngle, firstAngle + step });
         }
     }
