@@ -32,7 +32,7 @@ If you are just using the plugin in your project, you can cite this version of t
 
 * Download/clone this repository, making sure you're on the desired branch as described above.
 
-* Create the directory `plugin-GUI/Source/Plugins/PhaseCalculator` and copy all contents of this repository's `Source` into it.
+* Create the directory `plugin-GUI/Source/Plugins/PhaseCalculator` and copy all contents of this repository's `PhaseCalculator/Source` into it.
 
 ### Windows (Visual Studio 2013)
 
