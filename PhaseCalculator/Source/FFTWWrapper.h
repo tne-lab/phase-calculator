@@ -34,7 +34,7 @@ transform library
 #include <algorithm>    // reverse array
 #include <utility>
 
-#include "fftw3.h" // Fast Fourier Transform library
+#include <fftw3.h> // Fast Fourier Transform library
 
 /*
 FFTW-friendly array that can hold complex or real doubles.
