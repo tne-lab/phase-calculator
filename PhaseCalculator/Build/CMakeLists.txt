@@ -7,15 +7,6 @@ if (NOT DEFINED GUI_BASE_DIR)
 	endif()
 endif()
 
-# location of OpenEphysFFTW library (to locate header file)
-if (NOT DEFINED OEP_FFTW_DIR)
-	if (DEFINED ENV{OEP_FFTW_DIR})
-		set(OEP_FFTW_DIR $ENV{OEP_FFTW_DIR})
-	else()
-		set(OEP_FFTW_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../OpenEphysFFTW/OpenEphysFFTW)
-	endif()
-endif()
-
 get_filename_component(PROJECT_FOLDER ${CMAKE_CURRENT_SOURCE_DIR}/.. ABSOLUTE)
 get_filename_component(PLUGIN_NAME ${PROJECT_FOLDER} NAME)
 
@@ -25,17 +16,6 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
 	set(LINUX 1)
 endif()
 
-set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS
-	OEPLUGIN
-	"$<$<PLATFORM_ID:Windows>:JUCE_API=__declspec(dllimport)>"
-	$<$<PLATFORM_ID:Windows>:_CRT_SECURE_NO_WARNINGS>
-	$<$<PLATFORM_ID:Linux>:JUCE_DISABLE_NATIVE_FILECHOOSERS=1>
-	$<$<CONFIG:Debug>:DEBUG=1>
-	$<$<CONFIG:Debug>:_DEBUG=1>
-	$<$<CONFIG:Release>:NDEBUG=1>
-	)
-
-
 set(SOURCE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../Source)
 file(GLOB_RECURSE SRC_FILES LIST_DIRECTORIES false "${SOURCE_PATH}/*.cpp" "${SOURCE_PATH}/*.h")
 
@@ -44,6 +24,16 @@ if (APPLE)
 else()
 	add_library(${PLUGIN_NAME} SHARED ${SRC_FILES})
 endif()
+
+target_compile_definitions(${PLUGIN_NAME} PUBLIC
+	OEPLUGIN
+	"$<$<PLATFORM_ID:Windows>:JUCE_API=__declspec(dllimport)>"
+	$<$<PLATFORM_ID:Windows>:_CRT_SECURE_NO_WARNINGS>
+	$<$<PLATFORM_ID:Linux>:JUCE_DISABLE_NATIVE_FILECHOOSERS=1>
+	$<$<CONFIG:Debug>:DEBUG=1>
+	$<$<CONFIG:Debug>:_DEBUG=1>
+	$<$<CONFIG:Release>:NDEBUG=1>
+	)
 
 target_compile_features(${PLUGIN_NAME} PUBLIC cxx_auto_type cxx_generalized_initializers)
 target_include_directories(${PLUGIN_NAME} PUBLIC ${GUI_BASE_DIR}/JuceLibraryCode ${GUI_BASE_DIR}/JuceLibraryCode/modules ${GUI_BASE_DIR}/Source/Plugins/Headers)
@@ -57,15 +47,15 @@ if(MSVC)
 	else()
 		set(CMAKE_LIBRARY_ARCHITECTURE "x86")
 	endif()
-	set(GUI_BIN_DIR ${GUI_BIN_DIR}/$<IF:$<Config:Debug>,Debug/bin,Release/bin>)
+	set(GUI_BIN_DIR ${GUI_BIN_DIR}/$<IF:$<CONFIG:Debug>,Debug,Release>/bin)
 
 	target_link_libraries(${PLUGIN_NAME} ${GUI_BIN_DIR}/open-ephys.lib)
 	target_compile_options(${PLUGIN_NAME} PRIVATE /sdl-)
-	
+
 	install(TARGETS ${PLUGIN_NAME} RUNTIME DESTINATION ${GUI_BIN_DIR}/plugins)
 
-	set(CMAKE_PREFIX_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../../libs)
-	set(GUI_SHARED_DIR ${GUI_BIN_DIR}/shared)
+	set(CMAKE_PREFIX_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../../libs, ${GUI_BIN_DIR})
+
 elseif(LINUX)
 	set(GUI_BIN_DIR ${GUI_BASE_DIR}/Builds/Linux/build)
 
@@ -77,7 +67,7 @@ elseif(LINUX)
 	
 	install(TARGETS ${PLUGIN_NAME} LIBRARY DESTINATION ${GUI_BIN_DIR}/plugins)
 	
-	set(GUI_SHARED_DIR ${GUI_BIN_DIR}/shared)
+	set(CMAKE_LIBRARY_PATH ${GUI_BIN_DIR}/shared)
 elseif(APPLE)
 	set(GUI_BIN_DIR ${GUI_BASE_DIR}/Builds/MacOSX/build/)
 	set_target_properties(${PLUGIN_NAME} PROPERTIES BUNDLE TRUE)
@@ -86,8 +76,11 @@ elseif(APPLE)
 
 	install(TARGETS ${PLUGIN_NAME} DESTINATION $ENV{HOME}/Library/Application\ Support/open-ephys/PlugIns)
 	set(CMAKE_PREFIX_PATH /opt/local)
-	set(GUI_SHARED_DIR $ENV{HOME}/Library/Application\ Support/open-ephys/shared)
 endif()
+
+#include common lib header files
+
+target_include_directories(${PLUGIN_NAME} PUBLIC ${GUI_BIN_DIR}/include)
 
 #create filters for vs and xcode
 
@@ -99,7 +92,6 @@ foreach( src_file IN ITEMS ${SRC_FILES})
 endforeach()
 
 # add OpenEphysFFTW dependency
-find_library(OEP_FFTW_LIBRARIES NAMES OpenEphysFFTW PATHS ${GUI_SHARED_DIR})
+find_library(OEP_FFTW_LIBRARIES NAMES OpenEphysFFTW)
 
 target_link_libraries(${PLUGIN_NAME} ${OEP_FFTW_LIBRARIES})
-target_include_directories(${PLUGIN_NAME} PRIVATE ${OEP_FFTW_DIR}/Source)
