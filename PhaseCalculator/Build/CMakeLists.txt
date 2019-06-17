@@ -42,13 +42,11 @@ target_include_directories(${PLUGIN_NAME} PUBLIC ${GUI_BASE_DIR}/JuceLibraryCode
 if(MSVC)
 	set(GUI_BIN_DIR ${GUI_BASE_DIR}/Builds/VisualStudio2013)
 
-	if (CMAKE_GENERATOR_PLATFORM STREQUAL "x64")
+	if (CMAKE_SIZEOF_VOID_P EQUAL 8)
 		set(GUI_BIN_DIR ${GUI_BIN_DIR}/x64)
 		set(CMAKE_LIBRARY_ARCHITECTURE "x64")
-	elseif(CMAKE_GENERATOR_PLATFORM STREQUAL "Win32")
-		set(CMAKE_LIBRARY_ARCHITECTURE "x86")
 	else()
-		message(FATAL_ERROR "Unsupported generator platform ${CMAKE_GENERATOR_PLATFORM}")
+		set(CMAKE_LIBRARY_ARCHITECTURE "x86")
 	endif()
 
 	set(GUI_BIN_DIR ${GUI_BIN_DIR}/$<IF:$<CONFIG:Debug>,Debug,Release>/bin)
