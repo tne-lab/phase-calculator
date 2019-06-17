@@ -41,43 +41,52 @@ target_include_directories(${PLUGIN_NAME} PUBLIC ${GUI_BASE_DIR}/JuceLibraryCode
 #Libraries and compiler options
 if(MSVC)
 	set(GUI_BIN_DIR ${GUI_BASE_DIR}/Builds/VisualStudio2013)
-	if (CMAKE_SIZEOF_VOID_P EQUAL 8)
+
+	if (CMAKE_GENERATOR_PLATFORM STREQUAL "x64")
 		set(GUI_BIN_DIR ${GUI_BIN_DIR}/x64)
 		set(CMAKE_LIBRARY_ARCHITECTURE "x64")
-	else()
+	elseif(CMAKE_GENERATOR_PLATFORM STREQUAL "Win32")
 		set(CMAKE_LIBRARY_ARCHITECTURE "x86")
+	else()
+		message(FATAL_ERROR "Unsupported generator platform ${CMAKE_GENERATOR_PLATFORM}")
 	endif()
+
 	set(GUI_BIN_DIR ${GUI_BIN_DIR}/$<IF:$<CONFIG:Debug>,Debug,Release>/bin)
 
-	target_link_libraries(${PLUGIN_NAME} ${GUI_BIN_DIR}/open-ephys.lib)
+	target_link_libraries(${PLUGIN_NAME}
+		${GUI_BIN_DIR}/open-ephys.lib
+		${GUI_BIN_DIR}/lib/OpenEphysFFTW.lib)
+
 	target_compile_options(${PLUGIN_NAME} PRIVATE /sdl-)
 
 	install(TARGETS ${PLUGIN_NAME} RUNTIME DESTINATION ${GUI_BIN_DIR}/plugins)
 
-	set(CMAKE_PREFIX_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../../libs, ${GUI_BIN_DIR})
+	set(CMAKE_PREFIX_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../../libs)
 
 elseif(LINUX)
 	set(GUI_BIN_DIR ${GUI_BASE_DIR}/Builds/Linux/build)
 
-	target_link_libraries(${PLUGIN_NAME} GL X11 Xext Xinerama asound dl freetype pthread rt)
+	target_link_libraries(${PLUGIN_NAME} GL X11 Xext Xinerama asound dl freetype pthread rt
+		${GUI_BIN_DIR}/shared/libOpenEphysFFTW.so)
+
 	set_property(TARGET ${PLUGIN_NAME} APPEND_STRING PROPERTY LINK_FLAGS
 		"-fvisibility=hidden -fPIC -rdynamic -Wl,-rpath,'$ORIGIN/../shared'")
 	target_compile_options(${PLUGIN_NAME} PRIVATE -fPIC -rdynamic)
 	target_compile_options(${PLUGIN_NAME} PRIVATE -O3) #enable optimization for linux debug
 	
 	install(TARGETS ${PLUGIN_NAME} LIBRARY DESTINATION ${GUI_BIN_DIR}/plugins)
-	
-	set(CMAKE_LIBRARY_PATH ${GUI_BIN_DIR}/shared)
 
 elseif(APPLE)
 	set(GUI_BIN_DIR $ENV{HOME}/Library/Application\ Support/open-ephys)
+
+	target_link_libraries(${PLUGIN_NAME} ${GUI_BIN_DIR}/shared/libOpenEphysFFTW.dylib)
+
 	set_target_properties(${PLUGIN_NAME} PROPERTIES BUNDLE TRUE)
 	set_property(TARGET ${PLUGIN_NAME} APPEND_STRING PROPERTY LINK_FLAGS
 	"-undefined dynamic_lookup -rpath @loader_path/../../../../shared")
 
 	install(TARGETS ${PLUGIN_NAME} DESTINATION ${GUI_BIN_DIR}/PlugIns)
 
-	set(CMAKE_LIBRARY_PATH ${GUI_BIN_DIR}/shared)
 	set(CMAKE_PREFIX_PATH /opt/local)
 endif()
 
@@ -93,8 +102,3 @@ foreach( src_file IN ITEMS ${SRC_FILES})
 	string(REPLACE "/" "\\" group_name "${src_path_rel}")
 	source_group("${group_name}" FILES "${src_file}")
 endforeach()
-
-# add OpenEphysFFTW dependency
-find_library(OEP_FFTW_LIBRARY NAMES OpenEphysFFTW)
-
-target_link_libraries(${PLUGIN_NAME} ${OEP_FFTW_LIBRARY})
