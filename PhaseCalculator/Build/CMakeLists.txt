@@ -67,7 +67,7 @@ elseif(LINUX)
 	set(GUI_BIN_DIR ${GUI_BASE_DIR}/Builds/Linux/build)
 
 	target_link_libraries(${PLUGIN_NAME} GL X11 Xext Xinerama asound dl freetype pthread rt
-		${GUI_BIN_DIR}/shared/libOpenEphysFFTW.so)
+		${GUI_BIN_DIR}/shared/OpenEphysFFTW.so)
 
 	set_property(TARGET ${PLUGIN_NAME} APPEND_STRING PROPERTY LINK_FLAGS
 		"-fvisibility=hidden -fPIC -rdynamic -Wl,-rpath,'$ORIGIN/../shared'")
@@ -79,7 +79,7 @@ elseif(LINUX)
 elseif(APPLE)
 	set(GUI_BIN_DIR $ENV{HOME}/Library/Application\ Support/open-ephys)
 
-	target_link_libraries(${PLUGIN_NAME} ${GUI_BIN_DIR}/shared/libOpenEphysFFTW.dylib)
+	target_link_libraries(${PLUGIN_NAME} ${GUI_BIN_DIR}/shared/OpenEphysFFTW.dylib)
 
 	set_target_properties(${PLUGIN_NAME} PROPERTIES BUNDLE TRUE)
 	set_property(TARGET ${PLUGIN_NAME} APPEND_STRING PROPERTY LINK_FLAGS
