@@ -1,7 +1,7 @@
-To generate build files for your platform
-1) create a subdirectory where the files will be created. It is not recommended to generate the build files on the same folder as the CMakeLists.txt file
-2) Enter that directory using a command terminal
-3) Run cmake -G GENERATOR ..
+    
+To generate build files for your platform run in a command terminal:
+cd Build
+cmake -G GENERATOR ..
 
 Valid generators are:
 Windows:
