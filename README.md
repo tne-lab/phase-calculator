@@ -11,46 +11,23 @@ If you are just using the plugin in your project, you can cite this version of t
 <img src="ht_pc.png" width="200" /><img src="ht_pc_menu1.png" width="200"/><img src="ht_pc_menu2.png" width="200"/>
 <img src="PC_vis.png" width="350" />
 
-## Installation
-
-(Instructions here are for Windows and Linux - Mac support may be coming soon.)
-
-### Step 1: Decide which version to use.
+## Versions
 
 * You are on the `master` branch, which uses a [Hilbert transformer](https://www.intechopen.com/books/matlab-a-fundamental-tool-for-scientific-computing-and-engineering-applications-volume-1/digital-fir-hilbert-transformers-fundamentals-and-efficient-design-methods) FIR filter - actually one of several, depending on the frequency band you are filtering to. This is more efficient than the original (published) algorithm since it doesn't require as much AR model-based prediction nor calculating an FFT on each step.
 
 * If you want, you can switch to the `old-version` branch, which uses the Fourier-transform-based [Hilbert transform](https://en.wikipedia.org/wiki/Hilbert_transform) over a sliding window to estimate the analytic signal (from which we derive the phase). We have been testing variants of this algorithm in our lab since mid-2016, and it is now fairly polished, but is somewhat less computationally efficient than the newer version.
 
-* Alternatively, you can use the `tnel-development` branch of [tne-lab/plugin-GUI](https://github.com/tne-lab/plugin-GUI/tree/tnel-development), which is a fork of the Open Ephys GUI source code with this plugin and some other useful ones already built in. Then you don't even need this repository or the rest of the instructions! (If you're on Linux though, you'll still have to install FFTW as described below.) Beware though, these are development branches and will be more unstable than `open-ephys/plugin-GUI/master`.
+## Installation
 
-### All platforms:
+This plugin must now be built outside of the main GUI file tree using CMake. In order to do so, it must be in a sibling directory to plugin-GUI\* and the main GUI must have already been compiled.
 
-* If you haven't already, download the base source at https://github.com/open-ephys/plugin-GUI (either by cloning or downloading a ZIP file from the `master` branch).
+**Due to depending on the new `DspLib.h` header (added May 2019), this branch is only compatible with "development" versions of the main GUI between then and early July 2019, when the development GUI changed directory structure to support the CMake build system.** If you are already using CMake to build the main GUI, you should switch to the `cmake-gui` branch to get the compatible plugin CMake build file.
 
-  * If you already have the source or your own fork, it must be new enough to have the `DspLib` library, which was added on Feb 8, 2018 on the development branch (commit `2dcb98b...`).
+You must also first install the "OpenEphysFFTW" common library, available [here](https://github.com/tne-lab/OpenEphysFFTW/tree/master).
 
+See `PhaseCalculator/CMAKE_README.txt` and/or the wiki page [here](https://open-ephys.atlassian.net/wiki/spaces/OEW/pages/1259110401/Plugin+CMake+Builds) for build instructions.
 
-* Download/clone this repository, making sure you're on the desired branch as described above.
-
-* Create the directory `plugin-GUI/Source/Plugins/PhaseCalculator` and copy all contents of this repository's `PhaseCalculator/Source` into it.
-
-### Windows (Visual Studio 2013)
-
-* Create the directory `plugin-GUI/Builds/VisualStudio2013/Plugins/PhaseCalculator`and copy all contents of `Builds/VisualStudio2013` into it.
-
-* Copy the contents of `Resources/DLLs/VS2013` and `Resources/DLLs/VS2013-x64` into the corresponding directories in your `plugin-GUI` repository.
-
-* Copy `Resources/windows-libs/FFTW` into `plugin-GUI/Resources/windows-libs`.
-
-* Open `plugin-GUI/Builds/VisualStudio2013/open-ephys.sln` and build as normal for your target build configuration(s).
-
-* Open `plugin-GUI/Builds/VisualStudio2013/Plugins/Plugins.sln`. Right-click on the solution in Solution Explorer, select `Add -> Existing Project...`, and open `plugin-GUI/Builds/VisualStudio2013/Plugins/PhaseCalculator/PhaseCalculator.vcxproj` to add it to the solution. Then build as normal.
-
-### Linux
-
-* You need to install FFTW 3 (if not already present) into the standard library/header locations. See [here](http://www.fftw.org/download.html) for instructions on building from source. Many distributions may also provide FFTW 3 available in their package repositories. For instance, Ubuntu/Debian/Linux Mint provide the package `libfftw3-dev` (available on Ubuntu 14.04 "trusty" and later). The package on Arch Linux appears to be called simply `fftw`.
-
-* Once FFTW is installed, compile as usual with `make -f Makefile.plugins PhaseCalculator`.
+\* If you have the GUI built somewhere else, you can specify its location by setting the environment variable `GUI_BASE_DIR` or defining it when calling cmake with the option `-DGUI_BASE_DIR=<location>`.
 
 ## Usage
 
