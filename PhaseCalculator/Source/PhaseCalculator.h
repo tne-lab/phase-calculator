@@ -239,6 +239,7 @@ namespace PhaseCalculator
         */
         static double circDist(double x, double ref, double cutoff = 2 * Dsp::doublePi);
 
+        
     private:
 
         // ---- methods ----
@@ -391,6 +392,9 @@ namespace PhaseCalculator
 
         // event channel to send visualized phases over
         EventChannel* visPhaseChannel;
+
+        // Use LAA to return phase angle
+        double LAA(std::complex<double>);
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Node);
     };

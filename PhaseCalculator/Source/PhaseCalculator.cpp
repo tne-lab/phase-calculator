@@ -470,7 +470,8 @@ namespace PhaseCalculator
 
                 if (needPhase)
                 {
-                    nextComputedPhase = std::arg(htOutput[0]);
+                    //nextComputedPhase = std::arg(htOutput[0]); 
+                    nextComputedPhase = LAA(htOutput[0]);
                     phaseStep = circDist(nextComputedPhase, acInfo->lastComputedPhase, Dsp::doublePi) / stride;
                 }
                 if (needMag)
@@ -490,7 +491,8 @@ namespace PhaseCalculator
                         if (needPhase)
                         {
                             acInfo->lastComputedPhase = nextComputedPhase;
-                            nextComputedPhase = std::arg(htOutput[frame]);
+                            //nextComputedPhase = std::arg(htOutput[frame]);
+                            nextComputedPhase = LAA(htOutput[frame]);
                             phaseStep = circDist(nextComputedPhase, acInfo->lastComputedPhase, Dsp::doublePi) / stride;
                         }
                         if (needMag)
@@ -551,6 +553,48 @@ namespace PhaseCalculator
                 calcVisPhases(acInfo, getTimestamp(chan) + getNumSamples(chan));
             }
         }
+    }
+
+    double Node::LAA(std::complex<double> c)
+    {
+        // Hold phase before quantization
+        double q;
+
+        // Determine phase based on octant. See LAA alg details.
+        if (std::abs(c.real()) >= std::abs(c.imag()))
+        {
+            if (c.real() >= 0)
+            {
+                q = (1. / 8.) * (c.imag() / c.real());
+
+            }
+            else
+            {
+                if (c.imag() >= 0)
+                {
+                    q = .5 + (1 / 8) * (c.imag() / c.real());
+                }
+                else
+                {
+                    q = -.5 + (1 / 8) * (c.imag() / c.real());
+                }
+            }
+        }
+        else
+        {
+            if (c.imag() >= 0)
+            {
+                q = 0.25 - (1. / 8.) * (c.real() / c.imag());
+            }
+            else
+            {
+                q = -.25 - (1. / 8.) * (c.real() / c.imag());
+            }
+        }
+
+        // Do quantization on phase (based on bit percision). We are testing 8 bits.
+        double lsb = 1. / (2 ^ 8);
+        return floor(q / lsb) * lsb * 3.14/0.5;
     }
 
     // starts thread when acquisition begins
