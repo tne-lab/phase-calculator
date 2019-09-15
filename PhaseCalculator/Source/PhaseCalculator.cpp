@@ -1127,7 +1127,7 @@ namespace PhaseCalculator
         auto ed = getEditor();
         bool p, r, a;
         ed->getChannelSelectionState(chan, &p, &r, &a);
-        ed->setChannelSelectionState(chan - 1, false, r, a);
+        ed->setChannelSelectionState(chan, false, r, a);
 
         if (warn)
         {
