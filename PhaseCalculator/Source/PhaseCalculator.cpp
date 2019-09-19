@@ -565,18 +565,18 @@ namespace PhaseCalculator
         {
             if (c.real() >= 0)
             {
-                q = (1. / 8.) * (c.imag() / c.real());
+                q = (1. / 8.) * (c.imag() / c.real()); // octant 1 and 8
 
             }
             else
             {
                 if (c.imag() >= 0)
                 {
-                    q = .5 + (1 / 8) * (c.imag() / c.real());
+                    q = .5 + (1. / 8.) * (c.imag() / c.real()); // octant 4
                 }
                 else
                 {
-                    q = -.5 + (1 / 8) * (c.imag() / c.real());
+                    q = -.5 + (1. / 8.) * (c.imag() / c.real()); // octant 5
                 }
             }
         }
@@ -584,16 +584,16 @@ namespace PhaseCalculator
         {
             if (c.imag() >= 0)
             {
-                q = 0.25 - (1. / 8.) * (c.real() / c.imag());
+                q = 0.25 - (1. / 8.) * (c.real() / c.imag()); // octant 2 and 3
             }
             else
             {
-                q = -.25 - (1. / 8.) * (c.real() / c.imag());
+                q = -.25 - (1. / 8.) * (c.real() / c.imag()); // octant 6 and 7
             }
         }
 
         // Do quantization on phase (based on bit percision). We are testing 8 bits.
-        double lsb = 1. / (2 ^ 8);
+        double lsb = 1. / pow(2., 8.);
         return floor(q / lsb) * lsb * 3.14/0.5;
     }
 
