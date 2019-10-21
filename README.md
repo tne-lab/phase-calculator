@@ -49,3 +49,5 @@ Clicking the tab or window button opens the "event phase plot" view. This allows
 
 I hope you find this to be useful!
 -Ethan Blackwood ([ethanbb](https://github.com/ethanbb))
+
+Currently maintained by Mark Schatza (markschatza@gmail.com)
