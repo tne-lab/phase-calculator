@@ -25,10 +25,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <cmath>   // sqrt
 #include <cstring> // memcpy, memmove
 
-#include "PhaseCalculator.h"
-#include "PhaseCalculatorEditor.h"
+#include "StatePhaseEst.h"
+#include "StatePhaseEstEditor.h"
 
-namespace PhaseCalculator
+namespace StatePhaseEst
 {
     // ------- constants ------------
 
@@ -129,8 +129,9 @@ namespace PhaseCalculator
 
 
     /**** channel info *****/
-    ActiveChannelInfo::ActiveChannelInfo(const ChannelInfo& cInfo)
+    ActiveChannelInfo::ActiveChannelInfo(const ChannelInfo& cInfo, int PhaseAlg)
         : chanInfo(cInfo)
+        , PhaseAlg(PhaseAlg)
     {
         update();
     }
@@ -138,39 +139,73 @@ namespace PhaseCalculator
     void ActiveChannelInfo::update()
     {
         const Node& p = chanInfo.owner;
-        int arOrder = p.getAROrder();
-        float highCut = p.getHighCut();
-        float lowCut = p.getLowCut();
-        Band band = p.getBand();
 
-        // update length of history based on sample rate
-        // the history buffer should have enough samples to calculate phases for the viusalizer
-        // with the proper Hilbert transform length AND train an AR model of the requested order,
-        // using at least 1 second of data
-        int newHistorySize = chanInfo.dsFactor * jmax(
-            visHilbertLengthMs * Hilbert::fs / 1000,
-            arOrder + 1,
-            1 * Hilbert::fs);
-
-        history.resetAndResize(newHistorySize);
-
-        // set filter parameters
-        for (auto filt : { &filter, &reverseFilter })
+        int newHistorySize;
+        switch (PhaseAlg) {
+        case HILBERT_TRANSFORMER:
         {
-            filt->setup(
-                2,                      // order
-                chanInfo.sampleRate,    // sample rate
-                (highCut + lowCut) / 2, // center frequency
-                highCut - lowCut);      // bandwidth
+            int arOrder = p.getAROrder();
+            float highCut = p.getHighCut();
+            float lowCut = p.getLowCut();
+            Band band = p.getBand();
+
+            // update length of history based on sample rate
+            // the history buffer should have enough samples to calculate phases for the viusalizer
+            // with the proper Hilbert transform length AND train an AR model of the requested order,
+            // using at least 1 second of data
+            newHistorySize = chanInfo.dsFactor * jmax(
+                visHilbertLengthMs * Hilbert::fs / 1000,
+                arOrder + 1,
+                1 * Hilbert::fs);
+
+            // set filter parameters
+            for (auto filt : { &bandFilter, &bandReverseFilter })
+            {
+                filt->setup(
+                    2,                      // order
+                    chanInfo.sampleRate,    // sample rate
+                    (highCut + lowCut) / 2, // center frequency
+                    highCut - lowCut);      // bandwidth
+            }
+
+            arModeler.setParams(arOrder, newHistorySize, chanInfo.dsFactor);
+
+            htState.resize(Hilbert::delay[band] * 2 + 1);
+            break;
+        }
+        case STATE_SPACE:
+        {
+            // set filter parameters
+            for (auto filt : { &lowFilter, &lowReverseFilter })
+            {
+                filt->setup(
+                    2,                      // order
+                    chanInfo.sampleRate,    // sample rate
+                    200);                   // high cut for low pass
+            }
+
+            newHistorySize = chanInfo.dsFactor * jmax(
+                visHilbertLengthMs * sspe.getFs() / 1000,
+                1 * sspe.getFs());
+
+
+            sspe.setFreqs(p.getFreqs()); // swap from array (easy storage) to vector (easy calculations)
+
+
+            break;
+        }
         }
 
-        arModeler.setParams(arOrder, newHistorySize, chanInfo.dsFactor);
-
-        htState.resize(Hilbert::delay[band] * 2 + 1);
+        
+        history.resetAndResize(newHistorySize);
 
         // visualization stuff
         hilbertLengthMultiplier = Hilbert::fs * chanInfo.dsFactor / 1000;
         visHilbertBuffer.resize(visHilbertLengthMs * hilbertLengthMultiplier);
+
+
+
+        
 
         reset();
     }
@@ -178,9 +213,18 @@ namespace PhaseCalculator
     void ActiveChannelInfo::reset()
     {
         history.reset();
-        filter.reset();
-        arModeler.reset();
-        FloatVectorOperations::clear(htState.begin(), htState.size());
+ 
+        switch (PhaseAlg) {
+        case HILBERT_TRANSFORMER:
+            bandFilter.reset();
+            arModeler.reset();
+            FloatVectorOperations::clear(htState.begin(), htState.size());
+
+        case STATE_SPACE:
+            lowFilter.reset();
+            sspe.reset();
+        }
+
         interpCountdown = 0;
         lastComputedPhase = 0;
         lastComputedMag = 0;
@@ -232,7 +276,7 @@ namespace PhaseCalculator
     {
         if (!isActive() && dsFactor != 0)
         {
-            acInfo = new ActiveChannelInfo(*this);
+            acInfo = new ActiveChannelInfo(*this, HILBERT_TRANSFORMER);             ///////////////////// CHANGE ME TO EDITOR SELECTED PHASE TYPE
         }
 
         return isActive();
@@ -260,6 +304,9 @@ namespace PhaseCalculator
     {
         setProcessorType(PROCESSOR_TYPE_FILTER);
         setBand(ALPHA_THETA, true);
+        freqs = Array<float>();
+        freqs.add(5);
+        freqs.add(20);
     }
 
     Node::~Node() {}
@@ -291,7 +338,7 @@ namespace PhaseCalculator
         EventChannel* chan = new EventChannel(EventChannel::DOUBLE_ARRAY, 1, 1, sampleRate, this);
         chan->setName(chan->getName() + ": PC visualized phase (deg.)");
         chan->setDescription("The accurate phase in degrees of each visualized event");
-        chan->setIdentifier("phasecalc.visphase");
+        chan->setIdentifier("statephaseest.visphase");
 
         // metadata storing source data channel
         MetaDataDescriptor sourceChanDesc(MetaDataDescriptor::UINT16, 3, "Source Channel",
@@ -391,7 +438,15 @@ namespace PhaseCalculator
 
             // filter the data
             float* const wpIn = buffer.getWritePointer(chan);
-            acInfo->filter.process(nSamples, &wpIn);
+            switch (acInfo->PhaseAlg)
+            {
+            case HILBERT_TRANSFORMER:
+                acInfo->bandFilter.process(nSamples, &wpIn);
+                break;
+            case STATE_SPACE:
+                acInfo->lowFilter.process(nSamples, &wpIn);
+                break;
+            }
 
             // enqueue as much new data as can fit into history
             acInfo->history.enqueue(wpIn, nSamples);
@@ -399,58 +454,79 @@ namespace PhaseCalculator
             // calc phase and write out (only if AR model has been calculated)
             if (acInfo->history.isFull() && acInfo->arModeler.hasBeenFit())
             {
-                // read current AR parameters safely (uses lock internally)
-                acInfo->arModeler.getModel(localARParams);
-
-                // use AR model to fill predSamps (which is downsampled) based on past data.
-                int htDelay = Hilbert::delay[band];
                 int stride = acInfo->chanInfo.dsFactor;
 
-                double* pPredSamps = predSamps.getRawDataPointer();
-                const double* pLocalParam = localARParams.getRawDataPointer();
-                arPredict(acInfo->history, acInfo->interpCountdown, pPredSamps, pLocalParam,
-                    htDelay + 1, stride, arOrder);
-
-                // identify indices of current buffer to execute HT
-                htInds.clearQuick();
-                for (int i = acInfo->interpCountdown; i < nSamples; i += stride)
+                switch (acInfo->PhaseAlg)
                 {
-                    htInds.add(i);
-                }
-
-                int htOutputSamps = htInds.size() + 1;
-                if (htOutput.size() < htOutputSamps)
+                case HILBERT_TRANSFORMER:
                 {
-                    htOutput.resize(htOutputSamps);
-                }
+                    // read current AR parameters safely (uses lock internally)
 
-                // execute tranformer on current buffer
-                int kOut = -htDelay;
-                for (int kIn = 0; kIn < htInds.size(); ++kIn, ++kOut)
-                {
-                    double samp = htFilterSamp(wpIn[htInds[kIn]], band, acInfo->htState);
-                    if (kOut >= 0)
+                    acInfo->arModeler.getModel(localARParams);
+
+                    // use AR model to fill predSamps (which is downsampled) based on past data.
+                    int htDelay = Hilbert::delay[band];
+
+
+                    double* pPredSamps = predSamps.getRawDataPointer();
+                    const double* pLocalParam = localARParams.getRawDataPointer();
+                    arPredict(acInfo->history, acInfo->interpCountdown, pPredSamps, pLocalParam,
+                        htDelay + 1, stride, arOrder);
+
+                    // identify indices of current buffer to execute HT
+                    htInds.clearQuick();
+                    for (int i = acInfo->interpCountdown; i < nSamples; i += stride)
                     {
-                        double rc = wpIn[htInds[kOut]];
-                        double ic = htScaleFactor * samp;
-                        htOutput.set(kOut, std::complex<double>(rc, ic));
+                        htInds.add(i);
                     }
-                }
 
-                // copy state to transform prediction without changing the end-of-buffer state
-                htTempState = acInfo->htState;
-
-                // execute transformer on prediction
-                for (int i = 0; i <= htDelay; ++i, ++kOut)
-                {
-                    double samp = htFilterSamp(predSamps[i], band, htTempState);
-                    if (kOut >= 0)
+                    int htOutputSamps = htInds.size() + 1;
+                    if (htOutput.size() < htOutputSamps)
                     {
-                        double rc = i == htDelay ? predSamps[0] : wpIn[htInds[kOut]];
-                        double ic = htScaleFactor * samp;
-                        htOutput.set(kOut, std::complex<double>(rc, ic));
+                        htOutput.resize(htOutputSamps);
                     }
+
+                    // execute tranformer on current buffer
+                    int kOut = -htDelay;
+                    for (int kIn = 0; kIn < htInds.size(); ++kIn, ++kOut)
+                    {
+                        double samp = htFilterSamp(wpIn[htInds[kIn]], band, acInfo->htState);
+                        if (kOut >= 0)
+                        {
+                            double rc = wpIn[htInds[kOut]];
+                            double ic = htScaleFactor * samp;
+                            htOutput.set(kOut, std::complex<double>(rc, ic));
+                        }
+                    }
+
+                    // copy state to transform prediction without changing the end-of-buffer state
+                    htTempState = acInfo->htState;
+
+                    // execute transformer on prediction
+                    for (int i = 0; i <= htDelay; ++i, ++kOut)
+                    {
+                        double samp = htFilterSamp(predSamps[i], band, htTempState);
+                        if (kOut >= 0)
+                        {
+                            double rc = i == htDelay ? predSamps[0] : wpIn[htInds[kOut]];
+                            double ic = htScaleFactor * samp;
+                            htOutput.set(kOut, std::complex<double>(rc, ic));
+                        }
+                    }
+                    break;
                 }
+                case STATE_SPACE:
+                {
+                    const double* rpHistory = acInfo->history.begin();
+                    int histSize = acInfo->history.size();
+                    htOutput = acInfo->sspe.evalBuffer(rpHistory, histSize);
+
+                    break;
+                }
+                }
+                
+                
+                //// Kalman filtering needs to return complex values to htOutput and then existing pc can interpolate phase and such
 
                 // output with upsampling (interpolation)
                 float* wpOut = buffer.getWritePointer(chan);
@@ -634,7 +710,14 @@ namespace PhaseCalculator
                 acInfo->history.unwrapAndCopy(dataPtr, true);
 
                 // calculate parameters
-                acInfo->arModeler.fitModel(reverseData);
+                switch (acInfo->PhaseAlg)
+                {
+                case HILBERT_TRANSFORMER:
+                    acInfo->arModeler.fitModel(reverseData);
+                    break;
+                case STATE_SPACE:
+                    acInfo->sspe.fitModel(vector(reverseData), acInfo->chanInfo.sampleRate);
+                }
             }
 
             endTime = Time::getMillisecondCounter();
@@ -643,7 +726,7 @@ namespace PhaseCalculator
             {
                 sleep(remainingInterval);
             }
-        }
+        }       
     }
 
     void Node::updateSettings()
@@ -672,7 +755,6 @@ namespace PhaseCalculator
             deselectAllExtraChannels();
         }
     }
-
 
     Array<int> Node::getActiveInputs() const
     {
@@ -743,6 +825,11 @@ namespace PhaseCalculator
     Band Node::getBand() const
     {
         return band;
+    }
+
+    Array<float> Node::getFreqs() const
+    {
+        return freqs;
     }
 
     bool Node::tryToReadVisPhases(std::queue<double>& other)
@@ -1184,9 +1271,17 @@ namespace PhaseCalculator
             double* wpHilbert = acInfo->visHilbertBuffer.getRealPointer();
             acInfo->history.unwrapAndCopy(wpHilbert, false);
 
-            acInfo->reverseFilter.reset();
-            acInfo->reverseFilter.process(hilbertLength, &wpHilbert);
-
+            switch (acInfo->PhaseAlg)
+            {
+            case HILBERT_TRANSFORMER:
+                acInfo->bandReverseFilter.reset();
+                acInfo->bandReverseFilter.process(hilbertLength, &wpHilbert);
+                break;
+            case STATE_SPACE:
+                acInfo->lowReverseFilter.reset();
+                acInfo->lowReverseFilter.process(hilbertLength, &wpHilbert);
+                break;
+            }
             // un-reverse values
             acInfo->visHilbertBuffer.reverseReal(hilbertLength);
 

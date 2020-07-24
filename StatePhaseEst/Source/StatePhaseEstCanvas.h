@@ -21,15 +21,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 
-#ifndef PHASE_CALCULATOR_CANVAS_H_INCLUDED
-#define PHASE_CALCULATOR_CANVAS_H_INCLUDED
+#ifndef STATE_PHASE_EST_CANVAS_H_INCLUDED
+#define STATE_PHASE_EST_CANVAS_H_INCLUDED
 
-#include "PhaseCalculator.h"
+#include "StatePhaseEst.h"
 #include <VisualizerWindowHeaders.h>
 #include <set> // std::multiset
 #include <functional>
 
-namespace PhaseCalculator
+namespace StatePhaseEst
 {
     class Canvas;
 
@@ -203,4 +203,4 @@ namespace PhaseCalculator
 
 }
 
-#endif // PHASE_CALCULATOR_CANVAS_H_INCLUDED
+#endif // STATE_PHASE_ESTR_CANVAS_H_INCLUDED

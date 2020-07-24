@@ -20,14 +20,14 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "PhaseCalculatorEditor.h"
-#include "PhaseCalculatorCanvas.h"
+#include "StatePhaseEstEditor.h"
+#include "StatePhaseEstCanvas.h"
 #include "HTransformers.h"
 #include <climits> // INT_MAX
 #include <cfloat>  // FLT_MAX
 #include <cmath>   // abs
 
-namespace PhaseCalculator
+namespace StatePhaseEst
 {
     Editor::Editor(Node* parentNode, bool useDefaultParameterEditors)
         : VisualizerEditor(parentNode, 220, useDefaultParameterEditors)
@@ -346,7 +346,7 @@ namespace PhaseCalculator
     {
         VisualizerEditor::saveCustomParameters(xml);
 
-        xml->setAttribute("Type", "PhaseCalculatorEditor");
+        xml->setAttribute("Type", "StatePhaseEstEditor");
         Node* processor = (Node*)(getProcessor());
 
         XmlElement* paramValues = xml->createNewChildElement("VALUES");

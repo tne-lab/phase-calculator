@@ -21,15 +21,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 
-#ifndef PHASE_CALCULATOR_EDITOR_H_INCLUDED
-#define PHASE_CALCULATOR_EDITOR_H_INCLUDED
+#ifndef STATE_PHASE_EST_EDITOR_H_INCLUDED
+#define STATE_PHASE_EST_EDITOR_H_INCLUDED
 
 #include <sstream>  // string parsing
 #include <VisualizerEditorHeaders.h>
 
-#include "PhaseCalculator.h"
+#include "StatePhaseEst.h"
 
-namespace PhaseCalculator
+namespace StatePhaseEst
 {
     class Editor
         : public VisualizerEditor
@@ -173,4 +173,4 @@ namespace PhaseCalculator
     };
 }
 
-#endif // PHASE_CALCULATOR_EDITOR_H_INCLUDED
+#endif // STATE_PHASE_EST_EDITOR_H_INCLUDED

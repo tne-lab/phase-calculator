@@ -22,7 +22,7 @@
 
 #include <BasicJuceHeader.h>
 
-namespace PhaseCalculator
+namespace StatePhaseEst
 {
     class ARModeler {
     public:

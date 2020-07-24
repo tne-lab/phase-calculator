@@ -21,8 +21,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 
-#ifndef PHASE_CALCULATOR_H_INCLUDED
-#define PHASE_CALCULATOR_H_INCLUDED
+#ifndef STATE_PHASE_EST_H_INCLUDED
+#define STATE_PHASE_EST_H_INCLUDED
 
 /*
 
@@ -41,7 +41,7 @@ accuracy of phase-locked stimulation in real time.
 @see GenericProcessor, PhaseCalculatorEditor
 
 */
-
+#define _USE_MATH_DEFINES
 #include <ProcessorHeaders.h>
 #include <DspLib.h>           // Filtering
 #include <OpenEphysFFTW.h>    // Fourier transform
@@ -51,8 +51,13 @@ accuracy of phase-locked stimulation in real time.
 
 #include "ARModeler.h"     // Autoregressive modeling
 #include "HTransformers.h" // Hilbert transformers & frequency bands
+#include "SSPE.h"          // State Space Phase Estimation 
 
-namespace PhaseCalculator
+#include <math.h>
+
+
+
+namespace StatePhaseEst
 {
     // forward declarations
     struct ChannelInfo;
@@ -69,6 +74,11 @@ namespace PhaseCalculator
         OUTPUT_MODE,
         VIS_E_CHAN,
         VIS_C_CHAN
+    };
+    enum PhaseEst
+    {
+        HILBERT_TRANSFORMER,
+        STATE_SPACE
     };
 
     class ReverseStack : public Array<double, CriticalSection>
@@ -99,10 +109,11 @@ namespace PhaseCalculator
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ReverseStack);
     };
 
-
+    
     struct ActiveChannelInfo
     {
-        ActiveChannelInfo(const ChannelInfo& cInfo);
+        friend class SSPE;
+        ActiveChannelInfo(const ChannelInfo& cInfo, int phaseAlg);
 
         void update();
 
@@ -115,12 +126,102 @@ namespace PhaseCalculator
             <2>,                        // order
             1,                          // number of channels
             Dsp::DirectFormII>;         // realization
+        using LowpassFilter = Dsp::SimpleFilter
+            <Dsp::Butterworth::LowPass // filter type
+            <2>,                        // order
+            1,                          // number of channels
+            Dsp::DirectFormII>;         // realization
+
+        int PhaseAlg;
+
+        // Hilbert transformer decs
+        BandpassFilter bandFilter;
+        BandpassFilter bandReverseFilter;
+        ARModeler arModeler;
+        Array<double> htState;
+
+        // SSPE decs
+        SSPE sspe;
+        //Matrix phi;
+        //Matrix Q;
+        //Matrix M;
+        //float sigmaObs;
+
+        //vector freqs;
+
+        //vector prevState;
+        //Matrix prevCov;
+
+        //int realIndex;
+        //int imgIndex;
+        LowpassFilter lowFilter;
+        LowpassFilter lowReverseFilter;
+
+
+
+
+        // Both use the rest
+        ReverseStack history;
+
+        // number of samples until a new non-interpolated output. e.g. if this
+        // equals 1 after a buffer is processed, then there is one interpolated
+        // sample in the next buffer, and then the second sample will be computed.
+        // in range [0, dsFactor).
+        int interpCountdown;
+
+        // last non-interpolated ("computed") transformer output
+        double lastComputedPhase;
+        double lastComputedMag;
+
+        // last phase output, for glitch correction
+        float lastPhase;
+
+        // for visualization:
+        int hilbertLengthMultiplier;
+        FFTWTransformableArray visHilbertBuffer;
+        
+
+        const ChannelInfo& chanInfo;
+
+    private:
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ActiveChannelInfo);
+    };
+
+    /*
+    struct ActiveChannelInfo
+    {
+        ActiveChannelInfo(const ChannelInfo& cInfo);
+
+        void update();
+
+        // reset to perform after end of acquisition or update
+        void reset();
+
+        // filter design copied from FilterNode
+        using LowpassFilter = Dsp::SimpleFilter
+            <Dsp::Butterworth::LowPass // filter type
+            <2>,                        // order
+            1,                          // number of channels
+            Dsp::DirectFormII>;         // realization
 
         ReverseStack history;
 
-        BandpassFilter filter;
+        LowpassFilter filter;
 
         ARModeler arModeler;
+
+        Matrix phi;
+        Matrix Q;
+        Matrix M;
+        float sigmaObs;
+
+        vector freqs;
+
+        vector prevState;
+        Matrix prevCov;
+
+        int realIndex;
+        int imgIndex;
 
         Array<double> htState;
 
@@ -140,13 +241,14 @@ namespace PhaseCalculator
         // for visualization:
         int hilbertLengthMultiplier;
         FFTWTransformableArray visHilbertBuffer;
-        BandpassFilter reverseFilter;
+        LowpassFilter reverseFilter;
 
         const ChannelInfo& chanInfo;
 
     private:
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ActiveChannelInfo);
     };
+    */
 
     struct ChannelInfo
     {
@@ -176,9 +278,10 @@ namespace PhaseCalculator
     private:
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ChannelInfo);
     };
-
+    
+  
     // Output mode - corresponds to itemIDs on the ComboBox
-    enum OutputMode { PH = 1, MAG, PH_AND_MAG, IM };
+    enum OutputMode { PH = 1, MAG, PH_AND_MAG, IM, PH_AND_STD };
 
     class Node : public GenericProcessor, public Thread
     {
@@ -224,6 +327,7 @@ namespace PhaseCalculator
         float getHighCut() const;
         float getLowCut() const;
         Band getBand() const;
+        Array<float> getFreqs() const;
 
         // reads from the visPhaseBuffer if it can acquire a TryLock. returns true if successful.
         bool tryToReadVisPhases(std::queue<double>& other);
@@ -242,6 +346,16 @@ namespace PhaseCalculator
     private:
 
         // ---- methods ----
+
+        // SSPE Methods
+        //float fs = 30000;
+        //void oneStepKalman(vector& newState, Matrix& newStateCov, vector state, float measuredVal, Matrix stateCov, Matrix phi, Matrix Q, float sigmaObs, Matrix M);
+        //void smoother(vector& smoothX, Matrix& smoothP, Matrix& smoothJ, vector x, vector x_prev, vector P, vector P_prev, Matrix phi, Matrix Q);
+        //Matrix extract2x2(Matrix inputMatrix, int rowcol);
+        //void genKalmanParams(Matrix& phi, Matrix& Q, Matrix& M, vector freqs, vector ampVec, vector sigmaFreqs);
+        //float prctile(float percent, Array<float> arr);
+        //void fitModel(vector data, vector& initFreqs, vector& initAmp, vector& initSigma, double sigmaObs, vector prevState, Matrix prevCov);
+        //Array<std::complex<double>> evalBuffer(ActiveChannelInfo* acInfo);
 
         // Allow responding to stim events if a stimEventChannel is selected.
         void handleEvent(const EventChannel* eventInfo, const MidiMessage& event,
@@ -352,6 +466,9 @@ namespace PhaseCalculator
         // frequency band (determines which Hilbert transformer to use)
         Band band;
 
+        // Freqs of interest
+        Array<float> freqs;
+
         // filter passband
         float highCut;
         float lowCut;
@@ -398,4 +515,4 @@ namespace PhaseCalculator
 }
 
 
-#endif // PHASE_CALCULATOR_H_INCLUDED
+#endif // STATE_PHASE_EST_H_INCLUDED

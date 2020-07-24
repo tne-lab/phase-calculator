@@ -22,7 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <PluginInfo.h>
-#include "PhaseCalculator.h"
+#include "StatePhaseEst.h"
 #include <string>
 #ifdef WIN32
 #include <Windows.h>
@@ -37,7 +37,7 @@ using namespace Plugin;
 extern "C" EXPORT void getLibInfo(Plugin::LibraryInfo* info)
 {
     info->apiVersion = PLUGIN_API_VER;
-    info->name = "Phase Calculator";
+    info->name = "SSPE";
     info->libVersion = 1;
     info->numPlugins = NUM_PLUGINS;
 }
@@ -48,9 +48,9 @@ extern "C" EXPORT int getPluginInfo(int index, Plugin::PluginInfo* info)
     {
     case 0:
         info->type = Plugin::PLUGIN_TYPE_PROCESSOR;
-        info->processor.name = "Phase Calculator";
+        info->processor.name = "SSPE";
         info->processor.type = Plugin::FilterProcessor;
-        info->processor.creator = &(Plugin::createProcessor<PhaseCalculator::Node>);
+        info->processor.creator = &(Plugin::createProcessor<StatePhaseEst::Node>);
         break;
 
     default:
