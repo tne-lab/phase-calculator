@@ -188,7 +188,7 @@ namespace StatePhaseEst
                 visHilbertLengthMs * sspe.getFs() / 1000,
                 1 * sspe.getFs());
 
-
+            sspe.setHistSize(newHistorySize);
             sspe.setFreqs(p.getFreqs()); // swap from array (easy storage) to vector (easy calculations)
 
 
@@ -202,10 +202,6 @@ namespace StatePhaseEst
         // visualization stuff
         hilbertLengthMultiplier = Hilbert::fs * chanInfo.dsFactor / 1000;
         visHilbertBuffer.resize(visHilbertLengthMs * hilbertLengthMultiplier);
-
-
-
-        
 
         reset();
     }
@@ -223,6 +219,8 @@ namespace StatePhaseEst
         case STATE_SPACE:
             lowFilter.reset();
             sspe.reset();
+            sspe.setFreqs({1 });
+            sspe.setDesFreqIndex(.9, 1.1);
         }
 
         interpCountdown = 0;
@@ -253,7 +251,17 @@ namespace StatePhaseEst
 
         sampleRate = dataChannel->getSampleRate();
 
-        float fsMult = sampleRate / Hilbert::fs;
+        float fsMult;
+        if (true)
+        {
+            fsMult = sampleRate / 1000;
+        }
+        else
+        {
+            fsMult = sampleRate / Hilbert::fs;
+        }
+
+        
         float fsMultRound = std::round(fsMult);
         if (std::abs(fsMult - fsMultRound) < FLT_EPSILON)
         {
@@ -276,7 +284,9 @@ namespace StatePhaseEst
     {
         if (!isActive() && dsFactor != 0)
         {
-            acInfo = new ActiveChannelInfo(*this, HILBERT_TRANSFORMER);             ///////////////////// CHANGE ME TO EDITOR SELECTED PHASE TYPE
+            acInfo = new ActiveChannelInfo(*this, STATE_SPACE);             ///////////////////// CHANGE ME TO EDITOR SELECTED PHASE TYPE
+            //Array<float> freqs = Array<float>();
+
         }
 
         return isActive();
@@ -448,11 +458,12 @@ namespace StatePhaseEst
                 break;
             }
 
+
             // enqueue as much new data as can fit into history
             acInfo->history.enqueue(wpIn, nSamples);
 
             // calc phase and write out (only if AR model has been calculated)
-            if (acInfo->history.isFull() && acInfo->arModeler.hasBeenFit())
+            if (acInfo->history.isFull() && (acInfo->arModeler.hasBeenFit() || acInfo->sspe.hasBeenFit()))
             {
                 int stride = acInfo->chanInfo.dsFactor;
 
@@ -716,7 +727,8 @@ namespace StatePhaseEst
                     acInfo->arModeler.fitModel(reverseData);
                     break;
                 case STATE_SPACE:
-                    acInfo->sspe.fitModel(vector(reverseData), acInfo->chanInfo.sampleRate);
+                    acInfo->sspe.fitModel(reverseData);
+                    break;
                 }
             }
 
