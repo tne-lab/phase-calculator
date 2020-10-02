@@ -73,10 +73,21 @@ namespace StatePhaseEst
         HIGHCUT,
         OUTPUT_MODE,
         VIS_E_CHAN,
-        VIS_C_CHAN
+        VIS_C_CHAN,
+        PHASE_ALG,
+        WIN_SIZE,
+        AMP_EST,
+        Q_EST,
+        OBS_ERR_EST,
+        FREQ_ONE,
+        FREQ_TWO,
+        FREQ_THREE,
+        N_FREQS,
+        FOI
     };
     enum PhaseEst
     {
+        UNKNOWN_PHASE_ALG,
         HILBERT_TRANSFORMER,
         STATE_SPACE
     };
@@ -116,6 +127,9 @@ namespace StatePhaseEst
         ActiveChannelInfo(const ChannelInfo& cInfo, int phaseAlg);
 
         void update();
+
+        // Updates which phase alg to use
+        void updatePhaseAlg(int phaseAlg);
 
         // reset to perform after end of acquisition or update
         void reset();
@@ -252,9 +266,12 @@ namespace StatePhaseEst
 
     struct ChannelInfo
     {
-        ChannelInfo(const Node& pc, int i);
+        ChannelInfo(const Node& pc, int i, int PhaseAlg);
 
         void update();
+
+        // Updates which phase alg to use
+        void updatePhaseAlg(int phaseAlg);
 
         // returns false on failure. does nothing if already active.
         bool activate();
@@ -270,6 +287,9 @@ namespace StatePhaseEst
 
         // 0 if sample rate is not a multiple of Hilbert::FS (in this case it cannot be activated.)
         int dsFactor;
+
+        // Denote which alg to use
+        int PhaseAlg;
 
         // info for ongoing phase calculation - null if non-active.
         ScopedPointer<ActiveChannelInfo> acInfo;
@@ -322,12 +342,17 @@ namespace StatePhaseEst
         // miscellaneous helper
         int getFullSourceId(int chan);
 
+
+
         // getters
         int getAROrder() const;
         float getHighCut() const;
         float getLowCut() const;
         Band getBand() const;
         Array<float> getFreqs() const;
+        int getFoi() const;
+        float getObsErrorEst() const;
+        float getWinSize() const;
 
         // reads from the visPhaseBuffer if it can acquire a TryLock. returns true if successful.
         bool tryToReadVisPhases(std::queue<double>& other);
@@ -342,6 +367,8 @@ namespace StatePhaseEst
         * For interpolation, and also RosePlot visualization.
         */
         static double circDist(double x, double ref, double cutoff = 2 * Dsp::doublePi);
+        int sampsForeEval;
+        bool printedSamps;
 
     private:
 
@@ -472,6 +499,14 @@ namespace StatePhaseEst
         // filter passband
         float highCut;
         float lowCut;
+        int foi;
+
+        // SSPE defaults
+        float winSize;
+        float obsErrorEst;
+
+        // Indicate type of phase alg to use
+        int curPhaseAlg;
 
         // event channel to watch for phases to plot on the canvas (-1 = none)
         int visEventChannel;

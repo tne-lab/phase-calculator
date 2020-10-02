@@ -130,8 +130,9 @@ namespace StatePhaseEst
 
     /**** channel info *****/
     ActiveChannelInfo::ActiveChannelInfo(const ChannelInfo& cInfo, int PhaseAlg)
-        : chanInfo(cInfo)
-        , PhaseAlg(PhaseAlg)
+        : chanInfo  (cInfo)
+        , PhaseAlg  (PhaseAlg)
+        , sspe      ()
     {
         update();
     }
@@ -140,7 +141,7 @@ namespace StatePhaseEst
     {
         const Node& p = chanInfo.owner;
 
-        int newHistorySize;
+        int newHistorySize = 1000;
         switch (PhaseAlg) {
         case HILBERT_TRANSFORMER:
         {
@@ -171,6 +172,8 @@ namespace StatePhaseEst
             arModeler.setParams(arOrder, newHistorySize, chanInfo.dsFactor);
 
             htState.resize(Hilbert::delay[band] * 2 + 1);
+
+            hilbertLengthMultiplier = Hilbert::fs * chanInfo.dsFactor / 1000;
             break;
         }
         case STATE_SPACE:
@@ -186,12 +189,15 @@ namespace StatePhaseEst
 
             newHistorySize = chanInfo.dsFactor * jmax(
                 visHilbertLengthMs * sspe.getFs() / 1000,
-                1 * sspe.getFs());
+                int(p.getWinSize() / 1000) * sspe.getFs());
 
             sspe.setHistSize(newHistorySize);
             sspe.setFreqs(p.getFreqs()); // swap from array (easy storage) to vector (easy calculations)
+            sspe.setDesFreqIndex(p.getFoi());
+            sspe.setParams(DATA_FS, chanInfo.sampleRate);
+            sspe.setParams(OBS_ERR_EST_SSPE, p.getObsErrorEst());
 
-
+            hilbertLengthMultiplier = sspe.getFs() * chanInfo.dsFactor / 1000;
             break;
         }
         }
@@ -200,10 +206,15 @@ namespace StatePhaseEst
         history.resetAndResize(newHistorySize);
 
         // visualization stuff
-        hilbertLengthMultiplier = Hilbert::fs * chanInfo.dsFactor / 1000;
+        //hilbertLengthMultiplier = Hilbert::fs * chanInfo.dsFactor / 1000;
         visHilbertBuffer.resize(visHilbertLengthMs * hilbertLengthMultiplier);
 
         reset();
+    }
+
+    void ActiveChannelInfo::updatePhaseAlg(int phaseAlg)
+    {
+        PhaseAlg = phaseAlg;
     }
 
     void ActiveChannelInfo::reset()
@@ -219,8 +230,8 @@ namespace StatePhaseEst
         case STATE_SPACE:
             lowFilter.reset();
             sspe.reset();
-            sspe.setFreqs({1 });
-            sspe.setDesFreqIndex(.9, 1.1);
+            //sspe.setFreqs(chanInfo.owner.getFreqs());
+            //sspe.setDesFreqIndex(1);
         }
 
         interpCountdown = 0;
@@ -230,12 +241,14 @@ namespace StatePhaseEst
     }
 
 
-    ChannelInfo::ChannelInfo(const Node& pc, int i)
+    ChannelInfo::ChannelInfo(const Node& pc, int i, int PhaseAlg)
         : chan          (i)
         , sampleRate    (0)
         , dsFactor      (0)
         , acInfo        (nullptr)
         , owner         (pc)
+        , PhaseAlg      (PhaseAlg)
+
     {
         update();
     }
@@ -251,12 +264,12 @@ namespace StatePhaseEst
 
         sampleRate = dataChannel->getSampleRate();
 
-        float fsMult;
-        if (true)
+        float fsMult = sampleRate / Hilbert::fs;
+        if (PhaseAlg == STATE_SPACE)
         {
             fsMult = sampleRate / 1000;
         }
-        else
+        else if (PhaseAlg == HILBERT_TRANSFORMER)
         {
             fsMult = sampleRate / Hilbert::fs;
         }
@@ -280,13 +293,20 @@ namespace StatePhaseEst
         }
     }
 
+    void ChannelInfo::updatePhaseAlg(int phaseAlg)
+    {
+       PhaseAlg = phaseAlg;
+       if (isActive())
+       {
+           acInfo->updatePhaseAlg(phaseAlg);
+       }
+    }
+
     bool ChannelInfo::activate()
     {
         if (!isActive() && dsFactor != 0)
         {
-            acInfo = new ActiveChannelInfo(*this, STATE_SPACE);             ///////////////////// CHANGE ME TO EDITOR SELECTED PHASE TYPE
-            //Array<float> freqs = Array<float>();
-
+            acInfo = new ActiveChannelInfo(*this, PhaseAlg);   
         }
 
         return isActive();
@@ -311,12 +331,19 @@ namespace StatePhaseEst
         , outputMode(PH)
         , visEventChannel(-1)
         , visContinuousChannel(-1)
+        , curPhaseAlg(UNKNOWN_PHASE_ALG)
+        , foi(0)
+        , winSize(1000)
+        , obsErrorEst(1)
+        ,sampsForeEval(0)
+        ,printedSamps(false)
     {
         setProcessorType(PROCESSOR_TYPE_FILTER);
         setBand(ALPHA_THETA, true);
         freqs = Array<float>();
         freqs.add(5);
         freqs.add(20);
+        freqs.add(140);
     }
 
     Node::~Node() {}
@@ -408,11 +435,47 @@ namespace StatePhaseEst
         case VIS_C_CHAN:
             setVisContChan(int(newValue));
             break;
+        
+        case PHASE_ALG:
+            //jassert(newValue > 2);
+            curPhaseAlg = newValue;
+            updateActiveChannels();
+            break;
+
+        case FREQ_ONE:
+            freqs.set(0, newValue);
+            updateActiveChannels();
+            break;
+        case FREQ_TWO:
+            freqs.set(1, newValue);
+            updateActiveChannels();
+            break;
+        case FREQ_THREE:
+            freqs.set(2, newValue);
+            updateActiveChannels();
+            break;
+        case WIN_SIZE:
+            winSize = newValue;
+            updateActiveChannels();
+            break;
+        case OBS_ERR_EST:
+            obsErrorEst = newValue;
+            updateActiveChannels();
+            break;
+        case N_FREQS:
+            freqs.resize(int(newValue));
+           // updateActiveChannels();
+            break;
+        case FOI:
+            foi = int(newValue);
+            updateActiveChannels();
+            break;
         }
     }
 
     void Node::process(AudioSampleBuffer& buffer)
     {
+        sampsForeEval += buffer.getNumSamples();
         // handle subprocessors, if any
         HashMap<int, uint16>::Iterator subProcIt(subProcessorMap);
         while (subProcIt.next())
@@ -457,7 +520,6 @@ namespace StatePhaseEst
                 acInfo->lowFilter.process(nSamples, &wpIn);
                 break;
             }
-
 
             // enqueue as much new data as can fit into history
             acInfo->history.enqueue(wpIn, nSamples);
@@ -524,107 +586,162 @@ namespace StatePhaseEst
                             htOutput.set(kOut, std::complex<double>(rc, ic));
                         }
                     }
+
+                    // output with upsampling (interpolation)
+                    float* wpOut = buffer.getWritePointer(chan);
+                    float* wpOut2;
+                    if (outputMode == PH_AND_MAG)
+                    {
+                        // second output channel
+                        int outChan2 = getNumInputs() + ac;
+                        jassert(outChan2 < buffer.getNumChannels());
+                        wpOut2 = buffer.getWritePointer(outChan2);
+                    }
+
+                    double nextComputedPhase, phaseStep;
+                    double nextComputedMag, magStep;
+                    bool needPhase = outputMode != MAG;
+                    bool needMag = outputMode != PH;
+
+                    if (needPhase)
+                    {
+                        nextComputedPhase = std::arg(htOutput[0]);
+                        phaseStep = circDist(nextComputedPhase, acInfo->lastComputedPhase, Dsp::doublePi) / stride;
+
+
+                    }
+                    if (needMag)
+                    {
+                        nextComputedMag = std::abs(htOutput[0]);
+                        magStep = (nextComputedMag - acInfo->lastComputedMag) / stride;
+                    }
+
+                    for (int i = 0, frame = 0; i < nSamples; ++i, --acInfo->interpCountdown)
+                    {
+                        if (acInfo->interpCountdown == 0)
+                        {
+                            // update interpolation frame
+                            ++frame;
+                            acInfo->interpCountdown = stride;
+
+                            if (needPhase)
+                            {
+                                acInfo->lastComputedPhase = nextComputedPhase;
+                                nextComputedPhase = std::arg(htOutput[frame]);
+                                phaseStep = circDist(nextComputedPhase, acInfo->lastComputedPhase, Dsp::doublePi) / stride;
+                            }
+                            if (needMag)
+                            {
+                                acInfo->lastComputedMag = nextComputedMag;
+                                nextComputedMag = std::abs(htOutput[frame]);
+                                magStep = (nextComputedMag - acInfo->lastComputedMag) / stride;
+                            }
+                        }
+
+                        double thisPhase, thisMag;
+                        if (needPhase)
+                        {
+                            thisPhase = circDist(nextComputedPhase, phaseStep * acInfo->interpCountdown, Dsp::doublePi);
+                        }
+                        if (needMag)
+                        {
+                            thisMag = nextComputedMag - magStep * acInfo->interpCountdown;
+                        }
+
+                        switch (outputMode)
+                        {
+                        case MAG:
+                            wpOut[i] = float(thisMag);
+                            break;
+
+                        case PH_AND_MAG:
+                            wpOut2[i] = float(thisMag);
+                            // fall through
+                        case PH:
+                            // output in degrees
+                            wpOut[i] = float(thisPhase * (180.0 / Dsp::doublePi));
+                            break;
+
+                        case IM:
+                            wpOut[i] = float(thisMag * std::sin(thisPhase));
+                            break;
+                        }
+                    }
+
+                    // unwrapping / smoothing
+                    if (outputMode == PH || outputMode == PH_AND_MAG)
+                    {
+                        unwrapBuffer(wpOut, nSamples, acInfo->lastPhase);
+                        smoothBuffer(wpOut, nSamples, acInfo->lastPhase);
+                        acInfo->lastPhase = wpOut[nSamples - 1];
+                    }
                     break;
                 }
                 case STATE_SPACE:
                 {
-                    const double* rpHistory = acInfo->history.begin();
-                    int histSize = acInfo->history.size();
-                    htOutput = acInfo->sspe.evalBuffer(rpHistory, histSize);
+                    if (printedSamps == false)
+                    {
+                        //std::cout << "Samps before first eval buf: " << sampsForeEval << std::endl;
+                        //sampsForeEval = 0;
+                        //printedSamps = true;
+                    }
+                    
+                    Array<Dsp::complex_t> htOutput = acInfo->sspe.evalBuffer( buffer.getReadPointer(chan), buffer.getNumSamples());
+                    
+                    //float* wpOut = buffer.getWritePointer(chan);
+                    /*
+                    for (int i = 0; i < htOutput.size(); i++)
+                    {
+                        std::cout << float(std::arg(htOutput[i]) * 180.0 / Dsp::doublePi) <<std::endl;
+                    }
+                    std::cin.get();*/
+                    //acInfo->lastPhase = wpOut[SSPEout.size() - 1];
+                   
+                    // output with upsampling (interpolation)
+                    float* wpOut = buffer.getWritePointer(chan);
 
+                    double nextComputedPhase, phaseStep;
+                    double nextComputedMag, magStep;
+
+                    nextComputedPhase = std::arg(htOutput[0]);
+                    phaseStep = circDist(nextComputedPhase, acInfo->lastComputedPhase, Dsp::doublePi) / stride;
+
+                    for (int i = 0, frame = 0; i < nSamples; ++i, --acInfo->interpCountdown)
+                    {
+                        if (acInfo->interpCountdown == 0)
+                        {
+                            // update interpolation frame
+                            ++frame;
+                            acInfo->interpCountdown = stride;
+
+                            acInfo->lastComputedPhase = nextComputedPhase;
+                            nextComputedPhase = std::arg(htOutput[frame]);
+                            phaseStep = circDist(nextComputedPhase, acInfo->lastComputedPhase, Dsp::doublePi) / stride;
+
+
+                        }
+
+                        double thisPhase;
+
+                        thisPhase = circDist(nextComputedPhase, phaseStep * acInfo->interpCountdown, Dsp::doublePi);
+
+
+                        //std::cout << float(thisPhase * (180.0 / Dsp::doublePi)) << std::endl;
+                        wpOut[i] = float(thisPhase * (180.0 / Dsp::doublePi));
+
+                    }
+                    // unwrapping / smoothing
+                    if (outputMode == PH || outputMode == PH_AND_MAG)
+                    {
+                        unwrapBuffer(wpOut, nSamples, acInfo->lastPhase);
+                        smoothBuffer(wpOut, nSamples, acInfo->lastPhase);
+                        acInfo->lastPhase = wpOut[nSamples - 1];
+                    }
                     break;
                 }
                 }
                 
                 
-                //// Kalman filtering needs to return complex values to htOutput and then existing pc can interpolate phase and such
-
-                // output with upsampling (interpolation)
-                float* wpOut = buffer.getWritePointer(chan);
-                float* wpOut2;
-                if (outputMode == PH_AND_MAG)
-                {
-                    // second output channel
-                    int outChan2 = getNumInputs() + ac;
-                    jassert(outChan2 < buffer.getNumChannels());
-                    wpOut2 = buffer.getWritePointer(outChan2);
-                }
-
-                double nextComputedPhase, phaseStep;
-                double nextComputedMag, magStep;
-                bool needPhase = outputMode != MAG;
-                bool needMag = outputMode != PH;
-
-                if (needPhase)
-                {
-                    nextComputedPhase = std::arg(htOutput[0]);
-                    phaseStep = circDist(nextComputedPhase, acInfo->lastComputedPhase, Dsp::doublePi) / stride;
-                }
-                if (needMag)
-                {
-                    nextComputedMag = std::abs(htOutput[0]);
-                    magStep = (nextComputedMag - acInfo->lastComputedMag) / stride;
-                }
-
-                for (int i = 0, frame = 0; i < nSamples; ++i, --acInfo->interpCountdown)
-                {
-                    if (acInfo->interpCountdown == 0)
-                    {
-                        // update interpolation frame
-                        ++frame;
-                        acInfo->interpCountdown = stride;
-
-                        if (needPhase)
-                        {
-                            acInfo->lastComputedPhase = nextComputedPhase;
-                            nextComputedPhase = std::arg(htOutput[frame]);
-                            phaseStep = circDist(nextComputedPhase, acInfo->lastComputedPhase, Dsp::doublePi) / stride;
-                        }
-                        if (needMag)
-                        {
-                            acInfo->lastComputedMag = nextComputedMag;
-                            nextComputedMag = std::abs(htOutput[frame]);
-                            magStep = (nextComputedMag - acInfo->lastComputedMag) / stride;
-                        }
-                    }
-
-                    double thisPhase, thisMag;
-                    if (needPhase)
-                    {
-                        thisPhase = circDist(nextComputedPhase, phaseStep * acInfo->interpCountdown, Dsp::doublePi);
-                    }
-                    if (needMag)
-                    {
-                        thisMag = nextComputedMag - magStep * acInfo->interpCountdown;
-                    }
-
-                    switch (outputMode)
-                    {
-                    case MAG:
-                        wpOut[i] = float(thisMag);
-                        break;
-
-                    case PH_AND_MAG:
-                        wpOut2[i] = float(thisMag);
-                        // fall through
-                    case PH:
-                        // output in degrees
-                        wpOut[i] = float(thisPhase * (180.0 / Dsp::doublePi));
-                        break;
-
-                    case IM:
-                        wpOut[i] = float(thisMag * std::sin(thisPhase));
-                        break;
-                    }
-                }
-
-                // unwrapping / smoothing
-                if (outputMode == PH || outputMode == PH_AND_MAG)
-                {
-                    unwrapBuffer(wpOut, nSamples, acInfo->lastPhase);
-                    smoothBuffer(wpOut, nSamples, acInfo->lastPhase);
-                    acInfo->lastPhase = wpOut[nSamples - 1];
-                }
             }
             else // fifo not full or AR model not ready
             {
@@ -719,7 +836,6 @@ namespace StatePhaseEst
                 // unwrap reversed history and add to temporary data array
                 double* dataPtr = reverseData.getRawDataPointer();
                 acInfo->history.unwrapAndCopy(dataPtr, true);
-
                 // calculate parameters
                 switch (acInfo->PhaseAlg)
                 {
@@ -728,6 +844,7 @@ namespace StatePhaseEst
                     break;
                 case STATE_SPACE:
                     acInfo->sspe.fitModel(reverseData);
+                    printedSamps = false;
                     break;
                 }
             }
@@ -754,7 +871,7 @@ namespace StatePhaseEst
 
         for (int i = prevNumInputs; i < numInputs; ++i)
         {
-            channelInfo.add(new ChannelInfo(*this, i));
+            channelInfo.add(new ChannelInfo(*this, i, curPhaseAlg));
         }
 
         // create new data channels if necessary
@@ -842,6 +959,21 @@ namespace StatePhaseEst
     Array<float> Node::getFreqs() const
     {
         return freqs;
+    }
+
+    int Node::getFoi() const
+    {
+        return foi;
+    }
+
+    float Node::getWinSize() const
+    {
+        return winSize;
+    }
+
+    float Node::getObsErrorEst() const
+    {
+        return obsErrorEst;
     }
 
     bool Node::tryToReadVisPhases(std::queue<double>& other)
@@ -1329,6 +1461,7 @@ namespace StatePhaseEst
         for (auto chanInfo : channelInfo)
         {
             bool wasActive = chanInfo->isActive();
+            chanInfo->updatePhaseAlg(curPhaseAlg);
             chanInfo->update();
 
             if (wasActive && !chanInfo->isActive())
@@ -1344,6 +1477,7 @@ namespace StatePhaseEst
         for (int ai : getActiveInputs())
         {
             jassert(channelInfo[ai] && channelInfo[ai]->isActive());
+            channelInfo[ai]->acInfo->updatePhaseAlg(curPhaseAlg);
             channelInfo[ai]->acInfo->update();
         }
     }

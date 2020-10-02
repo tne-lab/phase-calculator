@@ -47,6 +47,9 @@ namespace StatePhaseEst
         // implements Label::Listener
         void labelTextChanged(Label* labelThatHasChanged) override;
 
+        // implements Button::Listener
+        void buttonEvent(Button* button) override;
+
         // update display based on current channel
         void channelChanged(int chan, bool newState) override;
 
@@ -136,6 +139,17 @@ namespace StatePhaseEst
         };
 
         int prevExtraChans;
+
+        void removeAllCurrentComponents();
+
+        // Select Phase Alg edit
+        void createSelectPhaseAlgComponents();
+        ScopedPointer<Label> phaseSelectLabel;
+        ScopedPointer<ComboBox> phaseSelectBox;
+
+
+        // Hilbert Transformer editor
+        void createHilbertComponents();
         ExtraChanManager extraChanManager;
 
         ScopedPointer<Label>    bandLabel;
@@ -158,6 +172,34 @@ namespace StatePhaseEst
 
         ScopedPointer<Label>    outputModeLabel;
         ScopedPointer<ComboBox> outputModeBox;
+
+        // SSPE Components
+        void createSSPEComponents();
+        
+        ScopedPointer<Label> numFreqsLabel;
+        ScopedPointer<ComboBox> numFreqsBox;
+
+        void createFreqArrayLabelEdit(ScopedPointer<Label>& freqLabel, ScopedPointer<Label>& freqEditable, int num);
+        ScopedPointer<Label> freqOneLabel;
+        ScopedPointer<Label> freqOneEditable;
+        ScopedPointer<Label> freqTwoLabel;
+        ScopedPointer<Label> freqTwoEditable;
+        ScopedPointer<Label> freqThreeLabel;
+        ScopedPointer<Label> freqThreeEditable;
+
+        ScopedPointer<Label> foiLabel;
+        ScopedPointer<ToggleButton> freqOneButton;
+        ScopedPointer<ToggleButton> freqTwoButton;
+        ScopedPointer<ToggleButton> freqThreeButton;
+
+        ScopedPointer<Label> winSizeLabel;
+        ScopedPointer<Label> winSizeEditable;
+        ScopedPointer<Label> obsErrorLabel;
+        ScopedPointer<Label> obsErrorEditable;
+
+
+
+
 
         // constants
         const String freqRangeTooltip = "Each option corresponds internally to a Hilbert transformer " +

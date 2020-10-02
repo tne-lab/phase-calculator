@@ -21,9 +21,10 @@ namespace StatePhaseEst
     using vector = Eigen::VectorXf;
     using Matrix = Eigen::MatrixXf;
 
-    enum STATE_PARAM
+    enum SSPE_PARAM
     {
-        FREQS,
+        DATA_FS,
+        OBS_ERR_EST_SSPE
     };
 
     // generate variables to guess on quality of phase esimtation
@@ -61,15 +62,24 @@ namespace StatePhaseEst
         :   fs          (1000)
         ,   foiIndex    (0)
         ,   sigmaObs    (0)
-        ,   stride      (40000/fs)
-        {}
+        ,   stride      (30000/fs)
+        ,   histSize(0)
+        ,   dataFs(30000)
+        ,   ampEst(vector(1))
+        ,   qEst(vector(1))
+        ,   obsErrorEst(1)
 
+        {
+            ampEst(0) = 0.999995434106301;
+            qEst(0) = 50;
+        }
+        
         ~SSPE() { }
 
         void reset()
         {
             hasBeenUsed = false;
-            freqsSet = false;
+            //freqsSet = false;
         }
 
         bool hasBeenFit()
@@ -80,6 +90,16 @@ namespace StatePhaseEst
         // returns true if successful.
         bool setParams(int paramIndex, float value)
         {
+            switch (paramIndex)
+            {
+            case DATA_FS:
+                dataFs = value;
+                stride = dataFs / fs;
+                break;
+            case OBS_ERR_EST_SSPE:
+                obsErrorEst = value;
+                break;
+            }
             return true;
         }
 
@@ -106,7 +126,6 @@ namespace StatePhaseEst
             {
                 freqs(i) = newFreqs[i];
             }
-            //freqs = vector(newFreqs);
             return true;
         }
 
@@ -115,60 +134,74 @@ namespace StatePhaseEst
             return fs;
         }
 
-        bool setDesFreqIndex(float foi_lowcut, float foi_highcut)
+        bool setDesFreqIndex(int foi)
         {
             int nFreqs = freqs.size();
          
-            for (int i = 0; i < nFreqs; i++)
+            if (foi <= nFreqs)
             {
-                if (freqs(i) > foi_lowcut && freqs(i) < foi_highcut)
-                {
-                    foiIndex = i;
-
-                    freqsSet = true;
-                    return freqsSet;
-                }
+                foiIndex = foi;
+                freqsSet = true;
+                return freqsSet;
             }
 
             freqsSet = false;
             return freqsSet;
         }
 
-        Array<std::complex<double>> evalBuffer(const double* rpHistory, int histSize)
+        Array<std::complex<double>> evalBuffer(const float *rpBuffer, int nSamples)
         { 
-            //std::cout << "histSize: " << histSize << std::endl;
-            //std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
             Array<Matrix> allX = Array<Matrix>();
+            allX.resize((int(nSamples) /stride) + 1);
             allX.set(0,prevState); // Append prevState
 
             Array<Matrix> allP = Array<Matrix>();
+            allP.resize((int(nSamples+1) / stride) + 1);
             allP.set(0,prevCov); // Append prevCov
 
-            for (int i = 1; i <= histSize/stride; i++)
+            int endInd = nSamples / stride;
+
+            for (int i = 1; i <= nSamples / stride; i++)
             {
                 Matrix newState;
                 Matrix newStateCov;
-                oneStepKalman(newState, newStateCov, allX[i-1], rpHistory[(i-1)*stride], allP[i-1], phi, Q, sigmaObs, M);
+                /*
+                if (rpBuffer[(i - 1) * stride]  == 0)
+                {
+                    endInd = i;
+                    break;
+                }*/
+                oneStepKalmanEval(newState, newStateCov, allX[i - 1], rpBuffer[(i - 1)* stride], allP[i - 1], phi, Q, sigmaObs, M);
                 allX.set(i,newState);
                 allP.set(i,newStateCov);
             }
-            //std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+            
 
-            prevState = allX.getLast();
-            prevCov = allP.getLast();
+            prevState = allX[endInd-1];
+            prevCov = allP[endInd-1];
 
             Array<std::complex<double>> complexArray = Array<std::complex<double>>();
-
-            for (int i = 1; i <= histSize / stride; i++)
+            complexArray.resize(endInd-1);
+            int cmpInd = 0;
+            for (int i = 1; i < endInd; i++, cmpInd++)
             {
-                complexArray.add(std::complex<double>(allX[i](foiIndex, 0), allX[i](foiIndex+1,0)));
+                 complexArray.set(cmpInd,std::complex<double>(allX[i](foiIndex, 0), allX[i](foiIndex + 1, 0)));
             }
-        
-            //Array<std::complex<double>> complexArray = Array<std::complex<double>>();
-            //std::cout << "Time difference evalbuffer kalman = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]" << std::endl;
-            //std::cin.get();
             return complexArray;      
         }
+
+        void oneStepKalmanEval(Matrix& newState, Matrix& newStateCov, Matrix state, float measuredVal, Matrix stateCov, Matrix phi, Matrix Q, float sigmaObs, Matrix M)
+        {
+            Matrix stateEst = phi * state;
+            Matrix pEst = phi * stateCov * phi.transpose() + Q;
+
+            Matrix kalmanGain = (pEst * M) / ((M.transpose() * pEst * M)(0) + sigmaObs);
+
+            Matrix temp = M.transpose() * stateEst;
+            newState = stateEst + kalmanGain * (measuredVal - temp(0));
+            newStateCov = pEst - kalmanGain * M.transpose() * pEst;
+        }
+
 
         float prctile(float percent, Array<float> arr)
         {
@@ -182,8 +215,6 @@ namespace StatePhaseEst
 
         void genKalmanParams(Matrix& phi, Matrix& Q, Matrix& M, vector freqs, vector ampVec, vector sigmaFreqs)
         {
-            
-            //float fs = 30000; // get from channel info
             int nFreqs = freqs.size();
             Array<Matrix> rotMat = Array<Matrix>(); // R(w)
             Array<Matrix> varMat = Array<Matrix>(); // Q
@@ -263,10 +294,10 @@ namespace StatePhaseEst
 
         void fitModel(Array<double> data_array)
         {
-            std::cout << "Trying to fit" <<  std::endl;
-            
             std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-            int stride = 40000 / fs;
+            //int stride = 40000 / fs;
+            int stride = dataFs / fs;
+            
             const double* inputSeries = data_array.begin();
             vector data = vector(data_array.size() / stride);
             for (int i = 0; i < data_array.size()/stride; i++)
@@ -318,13 +349,13 @@ namespace StatePhaseEst
                 ampEst = vector(1); // = // FROM MATLAB (0.9991)
                 ampEst(0) = 0.999995434106301;
                 allQ = vector(1); // = // from matlab (30.8456)
-                allQ(0) = 20.8601143457368;
-                tempSigmaObs = 0.0784202261595996; // = // from matlab
+                allQ(0) = 50;
+                tempSigmaObs = obsErrorEst; // = // from matlab
                 freqEst = vector(1);
-                freqEst(0) = 0.000628432315325676 / fs;
-                freqs(0) = 0.000628432315325676;
-                */
-
+                freqEst(0) = 5 / fs;
+                freqs(0) = 5;
+                
+                
                 ampEst = vector(3); // = // FROM MATLAB (0.9991)
                 ampEst(0) = 0.99;
                 ampEst(1) = 0.99;
@@ -342,7 +373,22 @@ namespace StatePhaseEst
                 
                 freqEst = vector(3);
                 freqEst = freqs / fs;
+                */
+
+                tempSigmaObs = obsErrorEst;
+
                 nFreqs = freqs.size();
+                ampEst.resize(nFreqs);
+                allQ.resize(nFreqs);
+                freqEst.resize(nFreqs);
+
+
+                for (int i = 0; i < nFreqs; i++)
+                {
+                    ampEst(i) = 0.999995434106301;
+                    allQ(i) = 50;
+                    freqEst(i) = freqs[i] / fs;
+                }
                 Matrix Pi;
                 Pi.setIdentity(2 * nFreqs, 2 * nFreqs);
                 prevCov = 0.001 * Pi;
@@ -351,16 +397,13 @@ namespace StatePhaseEst
                 prevState = Matrix::Zero(2 * nFreqs, 1);
                 //tempQ = P;
                 xstart = Matrix::Zero(2 * nFreqs, 1);
+                
             }
 
             //vector freqEst = freqs / fs;
             
             genKalmanParams(tempPhi, tempQ, tempM, freqs, ampEst, allQ); // gen initial kalman params
-            /*
-            std::cout << "tempPhi:\n " << tempPhi << std::endl;
-            std::cout << "tempQ:\n " << tempQ << std::endl;
-            std::cout << "tempM:\n " << tempM << std::endl;
-            */
+            
 
             int iter = 1;
             float errorVal = FLT_MAX;
@@ -466,7 +509,7 @@ namespace StatePhaseEst
                 Matrix A = P + xstart * xstart.transpose();
                 Matrix B = Matrix::Zero(allPSmooth[0].rows(), allPSmooth[0].cols());
                 Matrix C = Matrix::Zero(allPSmooth[0].rows(), allPSmooth[0].cols());
-                double tempSigmaObs = 0;
+                tempSigmaObs = 0;
 
                 for (int i = 0; i < nSamples; i++)
                 {
@@ -489,13 +532,13 @@ namespace StatePhaseEst
                     tempSigmaObs = tempSigmaObs + temp + (data(i) - temp1) * temp2;
                 }
 
-                tempSigmaObs = (1 / nSamples) * tempSigmaObs;
-
+                tempSigmaObs = (1.0 / float(nSamples)) * tempSigmaObs;
+                
                 vector oldFreq = freqEst * 1000 / (2 * M_PI);
 
                 freqEst = vector::Zero(nFreqs);
-                vector ampEst = vector::Zero(nFreqs);
-                vector allQ = vector::Zero(nFreqs);
+                ampEst = vector::Zero(nFreqs);
+                allQ = vector::Zero(nFreqs);
 
                 for (int i = 0; i < nFreqs; i++)
                 {
@@ -521,11 +564,19 @@ namespace StatePhaseEst
 
                 }
 
-                omega = freqEst * 1000 / (2 * M_PI);
+                
+                
+
+                omega = freqEst * 1000.0 / (2.0 * M_PI);
 
                 genKalmanParams(tempPhi, tempQ, tempM, omega, ampEst, allQ);
+                //std::cout << "tempQ:\n " << tempQ << std::endl;
+                //std::cout << "after genK allQ at end:\n " << allQ << std::endl;
+                //std::cin.get();
+
+
                 /*
-                std::cout << "after genK allQ at end:\n " << allQ << std::endl;
+                
                 std::cout << "after genK tempPhi at end:\n " << tempPhi << std::endl;
                 std::cout << "after genK ampEst at end:\n " << ampEst << std::endl;
                 std::cout << "after genK freqEst at end:\n " << freqEst << std::endl;
@@ -559,8 +610,7 @@ namespace StatePhaseEst
             hasBeenUsed = true;
 
             std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-
-
+            /*
             std::cout << "phi:\n" << phi << std::endl;
             std::cout << "Q:\n" << Q << std::endl;
             std::cout << "M:\n" << M << std::endl;
@@ -575,7 +625,7 @@ namespace StatePhaseEst
             
             std::cout << "Time difference fit model = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[µs]" << std::endl;
             std::cin.get();
-            
+            */
         }
 
         //Eigen::MatrixXf extract2x2(Matrix inputMatrix, int i)
@@ -639,7 +689,7 @@ namespace StatePhaseEst
             newStateCov = pEst - kalmanGain * M.transpose() * pEst;
 
             /*
-            std::cout << "newState:\n" << newState << std::endl;
+            std::cout << "newState kalman:\n" << newState << std::endl;
             std::cout << "newStateCov:\n" << newStateCov << std::endl;
             std::cout << "state:\n" << state << std::endl;
             std::cout << "measuredVal:\n" << measuredVal << std::endl;
@@ -655,17 +705,18 @@ namespace StatePhaseEst
             */
         }
 
-
+        float dataFs = 30000;
+        const int fs;
     private:
         bool hasBeenUsed = false;
         bool freqsSet = false;
 
-        const int fs;
+
+        
         int histSize;
         int stride;
 
         // SSPE decs
-        
         Matrix phi;
         Matrix Q;
         vector M;
@@ -681,6 +732,13 @@ namespace StatePhaseEst
 
         Matrix prevState;
         Matrix prevCov;
+
+        // Initial Estimates
+        vector ampEst;
+        vector qEst;
+        float obsErrorEst;
+
+
          
         int foiIndex;
         float sigmaObs;

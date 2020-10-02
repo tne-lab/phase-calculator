@@ -30,15 +30,69 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 namespace StatePhaseEst
 {
     Editor::Editor(Node* parentNode, bool useDefaultParameterEditors)
-        : VisualizerEditor(parentNode, 220, useDefaultParameterEditors)
+        : VisualizerEditor(parentNode, 220, useDefaultParameterEditors = false)
         , extraChanManager(parentNode)
         , prevExtraChans(0)
     {
+
         tabText = "Event Phase Plot";
-        int filterWidth = 120;
 
         // make the canvas now, so that restoring its parameters always works.
         canvas = new Canvas(parentNode);
+
+        switch (parentNode->curPhaseAlg)
+        {
+        case UNKNOWN_PHASE_ALG:
+            createSelectPhaseAlgComponents();
+            break;
+
+        case HILBERT_TRANSFORMER:
+            createHilbertComponents();
+            break;
+
+        case STATE_SPACE:
+            createSSPEComponents();
+            break;
+
+        }
+
+
+        // new channels should be disabled by default
+        channelSelector->paramButtonsToggledByDefault(false);
+
+    }
+
+    Editor::~Editor() {}
+
+    void Editor::createSelectPhaseAlgComponents()
+    {
+        setDesiredWidth(220);
+        int filterWidth = 120;
+        auto p = static_cast<Node*>(getProcessor());
+
+        phaseSelectLabel = new Label("phaseSelectL", "Select which phase algorithm to use:");
+        phaseSelectLabel->setBounds(5, 25, 200, 20);
+        phaseSelectLabel->setFont({ "Small Text", 12, Font::plain });
+        phaseSelectLabel->setColour(Label::textColourId, Colours::darkgrey);
+        addAndMakeVisible(phaseSelectLabel);
+
+        phaseSelectBox = new ComboBox("phaseSelectB");
+        phaseSelectBox->addItem("HILBERT_TRANSFORMER", 1);
+        phaseSelectBox->addItem("STATE_SPACE", 2);
+        phaseSelectBox->setSelectedId(p->curPhaseAlg);
+        phaseSelectBox->setTooltip(freqRangeTooltip);
+        phaseSelectBox->setBounds(7, 42, 200, 20);
+        phaseSelectBox->addListener(this);
+        addAndMakeVisible(phaseSelectBox);
+    }
+
+
+    void Editor::createHilbertComponents()
+    {
+
+        setDesiredWidth(220);
+        int filterWidth = 120;
+        auto p = static_cast<Node*>(getProcessor());
 
         bandLabel = new Label("bandL", "Freq range:");
         bandLabel->setBounds(5, 25, 100, 20);
@@ -51,7 +105,7 @@ namespace StatePhaseEst
         {
             bandBox->addItem(Hilbert::bandName[b], b + 1);
         }
-        bandBox->setSelectedId(parentNode->band + 1);
+        bandBox->setSelectedId(p->band + 1);
         bandBox->setTooltip(freqRangeTooltip);
         bandBox->setBounds(7, 42, 110, 20);
         bandBox->addListener(this);
@@ -67,7 +121,7 @@ namespace StatePhaseEst
         lowCutEditable->setEditable(true);
         lowCutEditable->addListener(this);
         lowCutEditable->setBounds(50, 70, 35, 18);
-        lowCutEditable->setText(String(parentNode->lowCut), dontSendNotification);
+        lowCutEditable->setText(String(p->lowCut), dontSendNotification);
         lowCutEditable->setColour(Label::backgroundColourId, Colours::grey);
         lowCutEditable->setColour(Label::textColourId, Colours::white);
         addAndMakeVisible(lowCutEditable);
@@ -88,7 +142,7 @@ namespace StatePhaseEst
         highCutEditable->setEditable(true);
         highCutEditable->addListener(this);
         highCutEditable->setBounds(50, 100, 35, 18);
-        highCutEditable->setText(String(parentNode->highCut), dontSendNotification);
+        highCutEditable->setText(String(p->highCut), dontSendNotification);
         highCutEditable->setColour(Label::backgroundColourId, Colours::grey);
         highCutEditable->setColour(Label::textColourId, Colours::white);
         addAndMakeVisible(highCutEditable);
@@ -111,7 +165,7 @@ namespace StatePhaseEst
         recalcIntervalEditable->setBounds(filterWidth + 5, 44, 55, 18);
         recalcIntervalEditable->setColour(Label::backgroundColourId, Colours::grey);
         recalcIntervalEditable->setColour(Label::textColourId, Colours::white);
-        recalcIntervalEditable->setText(String(parentNode->calcInterval), dontSendNotification);
+        recalcIntervalEditable->setText(String(p->calcInterval), dontSendNotification);
         recalcIntervalEditable->setTooltip(recalcIntervalTooltip);
         addAndMakeVisible(recalcIntervalEditable);
 
@@ -133,7 +187,7 @@ namespace StatePhaseEst
         arOrderEditable->setBounds(filterWidth + 55, 66, 25, 18);
         arOrderEditable->setColour(Label::backgroundColourId, Colours::grey);
         arOrderEditable->setColour(Label::textColourId, Colours::white);
-        arOrderEditable->setText(String(parentNode->arOrder), sendNotificationAsync);
+        arOrderEditable->setText(String(p->arOrder), sendNotificationAsync);
         arOrderEditable->setTooltip(arOrderTooltip);
         addAndMakeVisible(arOrderEditable);
 
@@ -148,17 +202,162 @@ namespace StatePhaseEst
         outputModeBox->addItem("MAG", MAG);
         outputModeBox->addItem("PH+MAG", PH_AND_MAG);
         outputModeBox->addItem("IMAG", IM);
-        outputModeBox->setSelectedId(parentNode->outputMode);
+        outputModeBox->setSelectedId(p->outputMode);
         outputModeBox->setTooltip(outputModeTooltip);
         outputModeBox->setBounds(filterWidth + 5, 105, 76, 19);
         outputModeBox->addListener(this);
         addAndMakeVisible(outputModeBox);
 
-        // new channels should be disabled by default
-        channelSelector->paramButtonsToggledByDefault(false);
     }
 
-    Editor::~Editor() {}
+    void Editor::createSSPEComponents()
+    {
+        setDesiredWidth(220);
+        
+        int filterWidth = 96;
+        auto p = static_cast<Node*>(getProcessor());
+
+        numFreqsLabel = new Label("nFreqL", "Num Freqs:");
+        numFreqsLabel->setBounds(5, 25, 75, 20);
+        numFreqsLabel->setFont({ "Small Text", 12, Font::plain });
+        numFreqsLabel->setColour(Label::textColourId, Colours::darkgrey);
+        addAndMakeVisible(numFreqsLabel);
+
+        numFreqsBox = new ComboBox("bandB");
+        for (int b = 1; b <= 3; ++b)
+        {
+            numFreqsBox->addItem(String(b), b);
+        }
+        numFreqsBox->setSelectedId(p->getFreqs().size());
+        //numFreqsBox->setTooltip(freqRangeTooltip);           // Change me!!!!!
+        numFreqsBox->setBounds(7, 42, 68, 20);
+        numFreqsBox->addListener(this);
+        addAndMakeVisible(numFreqsBox);
+
+        createFreqArrayLabelEdit(freqOneLabel, freqOneEditable, 0);
+        createFreqArrayLabelEdit(freqTwoLabel, freqTwoEditable, 1);
+        createFreqArrayLabelEdit(freqThreeLabel, freqThreeEditable, 2);
+
+
+        foiLabel = new Label("foiL", "FOI");
+        foiLabel->setBounds(filterWidth - 21, 50, 30, 20);
+        foiLabel->setFont({ "Small Text", 12, Font::plain });
+        foiLabel->setColour(Label::textColourId, Colours::darkgrey);
+        addAndMakeVisible(foiLabel);
+
+        int num = 0;
+        freqOneButton = new ToggleButton();
+        freqOneButton->setBounds(filterWidth - 20, 59 + 21 * num, 25, 30);
+        freqOneButton->addListener(this);
+        freqOneButton->setToggleState(false, dontSendNotification);
+        freqOneButton->setColour(ToggleButton::textColourId, Colours::white);
+        //averageButton->setTooltip("Average event related potentials");
+        freqOneButton->setRadioGroupId(1, dontSendNotification);
+
+        num++;
+        freqTwoButton = new ToggleButton();
+        freqTwoButton->setBounds(filterWidth - 20, 59 + 21 * num, 25, 30);
+        freqTwoButton->addListener(this);
+        freqTwoButton->setToggleState(false, dontSendNotification);
+        freqTwoButton->setColour(ToggleButton::textColourId, Colours::white);
+        //averageButton->setTooltip("Average event related potentials");
+        freqTwoButton->setRadioGroupId(1, dontSendNotification);
+
+        num++;
+        freqThreeButton = new ToggleButton();
+        freqThreeButton->setBounds(filterWidth - 20, 59 + 21 * num, 25, 30);
+        freqThreeButton->addListener(this);
+        freqThreeButton->setToggleState(false, dontSendNotification);
+        freqThreeButton->setColour(ToggleButton::textColourId, Colours::white);
+        //averageButton->setTooltip("Average event related potentials");
+        freqThreeButton->setRadioGroupId(1, dontSendNotification);
+
+        freqOneEditable->setText(String(p->freqs[0]), dontSendNotification);
+        addAndMakeVisible(freqOneEditable);
+        addAndMakeVisible(freqOneLabel);
+        addAndMakeVisible(freqOneButton);
+
+        winSizeLabel = new Label("winSizeL", "Win Size:");
+        winSizeLabel->setBounds(filterWidth, 25, 60, 20);
+        winSizeLabel->setFont({ "Small Text", 12, Font::plain });
+        winSizeLabel->setColour(Label::textColourId, Colours::darkgrey);
+        addAndMakeVisible(winSizeLabel);
+
+        winSizeEditable = new Label("winSizeE");
+        winSizeEditable->setEditable(true);
+        winSizeEditable->addListener(this);
+        winSizeEditable->setText(String(p->winSize), dontSendNotification);
+        winSizeEditable->setBounds(filterWidth + 62, 25, 45, 18);
+        winSizeEditable->setColour(Label::backgroundColourId, Colours::grey);
+        winSizeEditable->setColour(Label::textColourId, Colours::white);
+        addAndMakeVisible(winSizeEditable);
+
+
+        obsErrorLabel = new Label("obsErrorL", "Obs Err:");
+        obsErrorLabel->setBounds(filterWidth, 25 + 21, 65, 20);
+        obsErrorLabel->setFont({ "Small Text", 12, Font::plain });
+        obsErrorLabel->setColour(Label::textColourId, Colours::darkgrey);
+        addAndMakeVisible(obsErrorLabel);
+
+        obsErrorEditable = new Label("obsErrorE");
+        obsErrorEditable->setEditable(true);
+        obsErrorEditable->addListener(this);
+        obsErrorEditable->setText(String(p->obsErrorEst), dontSendNotification);
+        obsErrorEditable->setBounds(filterWidth + 62, 25 + 21, 45, 18);
+        obsErrorEditable->setColour(Label::backgroundColourId, Colours::grey);
+        obsErrorEditable->setColour(Label::textColourId, Colours::white);
+        addAndMakeVisible(obsErrorEditable);
+
+        // Set defualt vals
+        freqOneButton->setToggleState(false, dontSendNotification);
+        freqTwoButton->setToggleState(false, dontSendNotification);
+        freqThreeButton->setToggleState(false, dontSendNotification);
+
+        switch (p->freqs.size())
+        {
+        case 3:
+            addAndMakeVisible(freqThreeLabel);
+            addAndMakeVisible(freqThreeEditable);
+            addAndMakeVisible(freqThreeButton);
+            freqThreeEditable->setText(String(p->freqs[2]), dontSendNotification);
+        case 2:
+            addAndMakeVisible(freqTwoLabel);
+            addAndMakeVisible(freqTwoEditable);
+            addAndMakeVisible(freqTwoButton);
+            freqTwoEditable->setText(String(p->freqs[1]), dontSendNotification);
+            break;
+        }
+
+        switch (p->foi)
+        {
+        case 0:
+            freqOneButton->setToggleState(true, dontSendNotification);
+            break;
+        case 1:
+            freqTwoButton->setToggleState(true, dontSendNotification);
+            break;
+        case 2:
+            freqThreeButton->setToggleState(true, dontSendNotification);
+            break;
+        }
+
+    }
+
+    void Editor::createFreqArrayLabelEdit(ScopedPointer<Label>& freqLabel, ScopedPointer<Label>& freqEditable, int num)
+    {
+        freqLabel = new Label("nFreq" + String(0) + "L", "Freq:");
+        freqLabel->setBounds(5, 65 + 21 * num, 50, 20);
+        freqLabel->setFont({ "Small Text", 12, Font::plain });
+        freqLabel->setColour(Label::textColourId, Colours::darkgrey);
+
+        freqEditable = new Label("nFreq" + String(num) + "E");
+        freqEditable->setEditable(true);
+        freqEditable->addListener(this);
+        freqEditable->setBounds(45, 65 + 21 * num, 33, 18);
+        freqEditable->setColour(Label::backgroundColourId, Colours::grey);
+        freqEditable->setColour(Label::textColourId, Colours::white);
+        // freqEditable]->setTooltip(arOrderTooltip);                           // Change me!
+    }
 
     void Editor::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
     {
@@ -171,6 +370,78 @@ namespace StatePhaseEst
         else if (comboBoxThatHasChanged == outputModeBox)
         {
             processor->setParameter(OUTPUT_MODE, static_cast<float>(outputModeBox->getSelectedId()));
+        }
+
+        else if (comboBoxThatHasChanged == phaseSelectBox)
+        {
+            int phaseAlg = static_cast<int>(phaseSelectBox->getSelectedId());
+            processor->setParameter(PHASE_ALG, phaseAlg);
+            phaseSelectLabel->setVisible(false);
+            phaseSelectBox->setVisible(false);
+            std::cout << "phase alg: " << phaseAlg << std::endl;
+            std::cout << "sspe: " << STATE_SPACE << std::endl;
+            switch (phaseAlg)
+            {
+            case HILBERT_TRANSFORMER:
+                createHilbertComponents();
+                processor->updateAllChannels();
+                break;
+            case STATE_SPACE:
+                createSSPEComponents();
+                processor->updateAllChannels();
+                break;
+            }
+        }
+
+        else if (comboBoxThatHasChanged == numFreqsBox)
+        {
+            int nFreqs = static_cast<int>(numFreqsBox->getSelectedId());
+            freqThreeEditable->setVisible(false);
+            freqThreeLabel->setVisible(false);
+            freqThreeButton->setVisible(false);
+            freqTwoEditable->setVisible(false);
+            freqTwoLabel->setVisible(false);
+            freqTwoButton->setVisible(false);
+
+            processor->setParameter(N_FREQS, nFreqs);
+
+            int foi = processor->getFoi();
+
+            if (foi > nFreqs-1)
+            {
+                foi = nFreqs - 1;
+                processor->setParameter(FOI, foi);
+                switch (foi)
+                {
+                case 2:
+                    freqThreeButton->setToggleState(true, sendNotificationSync);
+                    break;
+                case 1:
+                    freqTwoButton->setToggleState(true, sendNotificationSync);
+                    break;
+                case 0:
+                    freqOneButton->setToggleState(true, sendNotificationSync);
+                    break;
+                }
+            }
+
+            switch (nFreqs)
+            {
+            case 3:
+                addAndMakeVisible(freqThreeLabel);
+                addAndMakeVisible(freqThreeEditable);
+                addAndMakeVisible(freqThreeButton);
+                processor->setParameter(FREQ_THREE, freqThreeEditable->getText().getFloatValue());
+                // drop through
+            case 2:
+                addAndMakeVisible(freqTwoLabel);
+                addAndMakeVisible(freqTwoEditable);
+                addAndMakeVisible(freqTwoButton);
+                processor->setParameter(FREQ_TWO, freqTwoEditable->getText().getFloatValue());
+                break;
+            case 1:
+                processor->updateActiveChannels(); // Just in case FOI gets updated. 
+            }
         }
     }
 
@@ -217,6 +488,101 @@ namespace StatePhaseEst
             {
                 processor->setParameter(HIGHCUT, floatInput);
             }
+        }
+
+        else if (labelThatHasChanged == freqOneEditable)
+        {
+            float floatInput;
+            bool valid = updateControl(labelThatHasChanged, 0.0f, FLT_MAX, processor->freqs[0], floatInput);
+
+            if (valid)
+            {
+                processor->setParameter(FREQ_ONE, floatInput);
+            }
+        }
+        else if (labelThatHasChanged == freqTwoEditable)
+        {
+            float floatInput;
+            bool valid = updateControl(labelThatHasChanged, 0.0f, FLT_MAX, processor->freqs[1], floatInput);
+
+            if (valid)
+            {
+                processor->setParameter(FREQ_TWO, floatInput);
+            }
+        }
+        else if (labelThatHasChanged == freqThreeEditable)
+        {
+            float floatInput;
+            bool valid = updateControl(labelThatHasChanged, 0.0f, FLT_MAX, processor->freqs[2], floatInput);
+
+            if (valid)
+            {
+                processor->setParameter(FREQ_THREE, floatInput);
+            }
+        }
+        else if (labelThatHasChanged == winSizeEditable)
+        {
+            float floatInput;
+            bool valid = updateControl(labelThatHasChanged, 0.0f, FLT_MAX, processor->winSize, floatInput);
+
+            if (valid)
+            {
+                processor->setParameter(WIN_SIZE, floatInput);
+            }
+        }
+        /*
+        else if (labelThatHasChanged == ampEstEditable)
+        {
+            float floatInput;
+            bool valid = updateControl(labelThatHasChanged, 0.0f, FLT_MAX, processor->ampEst, floatInput);
+
+            if (valid)
+            {
+                processor->setParameter(AMP_EST, floatInput);
+            }
+        }
+        else if (labelThatHasChanged == qEstEditable)
+        {
+            float floatInput;
+            bool valid = updateControl(labelThatHasChanged, 0.0f, FLT_MAX, processor->qEst, floatInput);
+
+            if (valid)
+            {
+                processor->setParameter(Q_EST, floatInput);
+            }
+        }
+        */
+        else if (labelThatHasChanged == obsErrorEditable)
+        {
+            float floatInput;
+            bool valid = updateControl(labelThatHasChanged, 0.0f, FLT_MAX, processor->obsErrorEst, floatInput);
+
+            if (valid)
+            {
+                processor->setParameter(OBS_ERR_EST, floatInput);
+            }
+        }
+    }
+
+    void Editor::buttonEvent(Button* button)
+    {
+        Node* processor = static_cast<Node*>(getProcessor());
+
+        if (button == freqOneButton)
+        {
+            processor->setParameter(FOI, 0);
+            processor->updateActiveChannels();
+        }
+
+        else if (button == freqTwoButton)
+        {
+            processor->setParameter(FOI, 1);
+            processor->updateActiveChannels();
+        }
+        else if (button == freqThreeButton)
+        {
+            processor->setParameter(FOI, 2);
+            processor->updateActiveChannels();
         }
     }
 
@@ -265,21 +631,30 @@ namespace StatePhaseEst
 
     void Editor::startAcquisition()
     {
-        bandBox->setEnabled(false);
-        lowCutEditable->setEnabled(false);
-        highCutEditable->setEnabled(false);
-        arOrderEditable->setEnabled(false);
-        outputModeBox->setEnabled(false);
+        auto pc = static_cast<Node*>(getProcessor());
+        if (pc->curPhaseAlg == HILBERT_TRANSFORMER)
+        {
+            bandBox->setEnabled(false);
+            lowCutEditable->setEnabled(false);
+            highCutEditable->setEnabled(false);
+            arOrderEditable->setEnabled(false);
+            outputModeBox->setEnabled(false);
+        }
+
         channelSelector->inactivateButtons();
     }
 
     void Editor::stopAcquisition()
     {
-        bandBox->setEnabled(true);
-        lowCutEditable->setEnabled(true);
-        highCutEditable->setEnabled(true);
-        arOrderEditable->setEnabled(true);
-        outputModeBox->setEnabled(true);
+        auto pc = static_cast<Node*>(getProcessor());
+        if (pc->curPhaseAlg == HILBERT_TRANSFORMER)
+        {
+            bandBox->setEnabled(true);
+            lowCutEditable->setEnabled(true);
+            highCutEditable->setEnabled(true);
+            arOrderEditable->setEnabled(true);
+            outputModeBox->setEnabled(true);
+        }
         channelSelector->activateButtons();
     }
 
@@ -349,31 +724,113 @@ namespace StatePhaseEst
         xml->setAttribute("Type", "StatePhaseEstEditor");
         Node* processor = (Node*)(getProcessor());
 
-        XmlElement* paramValues = xml->createNewChildElement("VALUES");
-        paramValues->setAttribute("calcInterval", processor->calcInterval);
-        paramValues->setAttribute("arOrder", processor->arOrder);
-        paramValues->setAttribute("lowCut", processor->lowCut);
-        paramValues->setAttribute("highCut", processor->highCut);
-        paramValues->setAttribute("outputMode", processor->outputMode);
 
+        XmlElement* paramValues = xml->createNewChildElement("VALUES");
         const Array<float>& validBand = Hilbert::validBand[processor->band];
-        paramValues->setAttribute("rangeMin", validBand[0]);
-        paramValues->setAttribute("rangeMax", validBand[1]);
+        switch (processor->curPhaseAlg)
+        {
+        case HILBERT_TRANSFORMER:
+            paramValues->setAttribute("phaseAlg", HILBERT_TRANSFORMER);
+            paramValues->setAttribute("calcInterval", processor->calcInterval);
+            paramValues->setAttribute("arOrder", processor->arOrder);
+            paramValues->setAttribute("lowCut", processor->lowCut);
+            paramValues->setAttribute("highCut", processor->highCut);
+            paramValues->setAttribute("outputMode", processor->outputMode);
+
+            
+            paramValues->setAttribute("rangeMin", validBand[0]);
+            paramValues->setAttribute("rangeMax", validBand[1]);
+            break;
+        case STATE_SPACE:
+            paramValues->setAttribute("phaseAlg", STATE_SPACE);
+            paramValues->setAttribute("winSize", processor->winSize);
+            paramValues->setAttribute("obsErrorEst", processor->obsErrorEst);
+            paramValues->setAttribute("foi", processor->getFoi());
+            paramValues->setAttribute("nFreqs", processor->freqs.size());
+
+            for (int i = 0; i < processor->freqs.size(); i++)
+            {
+                paramValues->setAttribute("freq_"+String(i+1), processor->freqs[i]);
+            }
+            break;
+        }
+
+        
+
     }
 
     void Editor::loadCustomParameters(XmlElement* xml)
     {
         VisualizerEditor::loadCustomParameters(xml);
 
+        auto p = static_cast<Node*>(getProcessor());
+        int cpa = 0;
         forEachXmlChildElementWithTagName(*xml, xmlNode, "VALUES")
         {
             // some parameters have two fallbacks for backwards compatability
-            recalcIntervalEditable->setText(xmlNode->getStringAttribute("calcInterval", recalcIntervalEditable->getText()), sendNotificationSync);
-            arOrderEditable->setText(xmlNode->getStringAttribute("arOrder", arOrderEditable->getText()), sendNotificationSync);
-            bandBox->setSelectedId(selectBandFromSavedParams(xmlNode) + 1, sendNotificationSync);
-            lowCutEditable->setText(xmlNode->getStringAttribute("lowCut", lowCutEditable->getText()), sendNotificationSync);
-            highCutEditable->setText(xmlNode->getStringAttribute("highCut", highCutEditable->getText()), sendNotificationSync);
-            outputModeBox->setSelectedId(xmlNode->getIntAttribute("outputMode", outputModeBox->getSelectedId()), sendNotificationSync);
+            (xmlNode->getStringAttribute("phaseAlg", "0"), sendNotificationSync);
+
+            cpa = xmlNode->getStringAttribute("phaseAlg", "0").getIntValue();
+            p->setParameter(PHASE_ALG, cpa);
+
+            switch (cpa)
+            {
+            case UNKNOWN_PHASE_ALG:
+                createSelectPhaseAlgComponents();
+                break;
+            case HILBERT_TRANSFORMER:
+                phaseSelectLabel->setVisible(false);
+                phaseSelectBox->setVisible(false);
+                createHilbertComponents();
+               // p->setParameter(PHASE_ALG, cpa);
+
+                recalcIntervalEditable->setText(xmlNode->getStringAttribute("calcInterval", recalcIntervalEditable->getText()), sendNotificationSync);
+                arOrderEditable->setText(xmlNode->getStringAttribute("arOrder", arOrderEditable->getText()), sendNotificationSync);
+                bandBox->setSelectedId(selectBandFromSavedParams(xmlNode) + 1, sendNotificationSync);
+                lowCutEditable->setText(xmlNode->getStringAttribute("lowCut", lowCutEditable->getText()), sendNotificationSync);
+                highCutEditable->setText(xmlNode->getStringAttribute("highCut", highCutEditable->getText()), sendNotificationSync);
+                outputModeBox->setSelectedId(xmlNode->getIntAttribute("outputMode", outputModeBox->getSelectedId()), sendNotificationSync);
+                break;
+            case STATE_SPACE:
+                phaseSelectLabel->setVisible(false);
+                phaseSelectBox->setVisible(false);
+                createSSPEComponents();
+
+                winSizeEditable->setText(xmlNode->getStringAttribute("winSize", winSizeEditable->getText()), sendNotificationSync);
+                obsErrorEditable->setText(xmlNode->getStringAttribute("obsErrorEst", obsErrorEditable->getText()), sendNotificationSync);
+                int nFreqs = xmlNode->getStringAttribute("nFreqs", "1").getIntValue();
+
+                numFreqsBox->setSelectedId(nFreqs, sendNotificationSync);
+                switch (nFreqs)
+                {
+                case 3:
+                    addAndMakeVisible(freqThreeLabel);
+                    addAndMakeVisible(freqThreeEditable);
+                    addAndMakeVisible(freqThreeButton);
+                    freqThreeEditable->setText(xmlNode->getStringAttribute("freq_3", freqThreeEditable->getText()), sendNotificationSync);
+                case 2:
+                    addAndMakeVisible(freqTwoLabel);
+                    addAndMakeVisible(freqTwoEditable);
+                    addAndMakeVisible(freqTwoButton);
+                    freqTwoEditable->setText(xmlNode->getStringAttribute("freq_2", freqTwoEditable->getText()), sendNotificationSync);
+                case 1:
+                    freqOneEditable->setText(xmlNode->getStringAttribute("freq_1", freqOneEditable->getText()), sendNotificationSync);
+                    break;
+                }
+
+                switch (xmlNode->getStringAttribute("foi", "0").getIntValue())
+                {
+                case 2:
+                    freqThreeButton->setToggleState(true, sendNotificationSync);
+                    break;
+                case 1:
+                    freqTwoButton->setToggleState(true, sendNotificationSync);
+                    break;
+                case 0:
+                    freqOneButton->setToggleState(true, sendNotificationSync);
+                    break;
+                }
+            }     
         }
     }
 
