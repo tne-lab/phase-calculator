@@ -14,12 +14,20 @@
 #include <complex>
 #include <chrono>
 
+#include <iostream>
+#include <fstream>
+
+#include <limits>
+#include <iomanip>
+#include <sstream>
+typedef std::numeric_limits< double > dbl;
+
 //using namespace StatePhaseEst;
 
 namespace StatePhaseEst
 { 
-    using vector = Eigen::VectorXf;
-    using Matrix = Eigen::MatrixXf;
+    using vector = Eigen::VectorXd;
+    using Matrix = Eigen::MatrixXd;
 
     enum SSPE_PARAM
     {
@@ -68,10 +76,13 @@ namespace StatePhaseEst
         ,   ampEst(vector(1))
         ,   qEst(vector(1))
         ,   obsErrorEst(1)
+       // ,   myfile(std::ofstream("D:\\TNEL\\oep-installation\\state-phase-est\\StatePhaseEst\\Source\\bufdat.txt", std::ios::app))
 
         {
             ampEst(0) = 0.999995434106301;
             qEst(0) = 50;
+            
+            
         }
         
         ~SSPE() { }
@@ -224,10 +235,11 @@ namespace StatePhaseEst
                 // Add rotation matrix
                 double freq = freqs(i);
                 Matrix mat = Matrix(2, 2);
-                mat(0, 0) = cos(2 * M_PI * freq / fs);
-                mat(0, 1) = -1 * sin(2 * M_PI * freq / fs);
-                mat(1, 0) = sin(2 * M_PI * freq / fs);
-                mat(1, 1) = cos(2 * M_PI * freq / fs);
+                double pi = 3.141592653589793;
+                mat(0, 0) = cos(2 * pi * freq / fs);
+                mat(0, 1) = -1 * sin(2 * pi * freq / fs);
+                mat(1, 0) = sin(2 * pi * freq / fs);
+                mat(1, 1) = cos(2 * pi * freq / fs);
                 Matrix ampMat = mat * ampVec(i);
                 rotMat.add(ampMat);
 
@@ -294,16 +306,31 @@ namespace StatePhaseEst
 
         void fitModel(Array<double> data_array)
         {
+            std::cout.precision(dbl::max_digits10);
             std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
             //int stride = 40000 / fs;
             int stride = dataFs / fs;
-            
+            //std::ofstream myfile("D:\\TNEL\\oep-installation\\state-phase-est\\StatePhaseEst\\Source\\bufdat.csv", std::ios::app);
+           // std::cout << "Stride: " << stride << std::endl;
+           // std::cout << "data Size: " << data_array.size() << std::endl;
             const double* inputSeries = data_array.begin();
             vector data = vector(data_array.size() / stride);
             for (int i = 0; i < data_array.size()/stride; i++)
             {
+                //std::stringstream ss;
+                //ss << std::setprecision( std::numeric_limits<double>::digits10+2);
+                //ss << std::setprecision(std::numeric_limits<double>::max());
+                //ss << inputSeries[i * stride];
+                //myfile << std::fixed << std::setprecision(dbl::max_digits10 + 2) << inputSeries[i * stride] << ",";
                 data(i) =  inputSeries[i*stride];
+                if (i < 3)
+                {
+                    std::cout << i << " : " << data(i) << std::endl;
+                }      
             }
+            std::cin.ignore();
+            //myfile << "\n" << std::endl;
+            //myfile.close();
 
             if (freqsSet == false)
             {
@@ -385,7 +412,7 @@ namespace StatePhaseEst
 
                 for (int i = 0; i < nFreqs; i++)
                 {
-                    ampEst(i) = 0.999995434106301;
+                    ampEst(i) = 0.99;
                     allQ(i) = 50;
                     freqEst(i) = freqs[i] / fs;
                 }
@@ -410,33 +437,48 @@ namespace StatePhaseEst
             Matrix prevStateModel = prevState;
             Matrix prevCovModel = prevCov;
 
+ 
+
             Array<Matrix> allP_N_N1 = Array<Matrix>();
-            for (int i = 0; i < nSamples; i++)
-            {
-                allP_N_N1.add(Matrix::Zero(2 * nFreqs, 2 * nFreqs));
-            }
 
             Array<Matrix> allXSmooth = Array<Matrix>();
             Array<Matrix> allPSmooth = Array<Matrix>();
             Array<Matrix> allJSmooth = Array<Matrix>();
-            for (int i = 0; i < nSamples; i++)
-            {
-                allXSmooth.add(Matrix::Zero(2 * nFreqs, 1));
-                allPSmooth.add(Matrix::Zero(2 * nFreqs, 2 * nFreqs));
-                if (i != nSamples-1)
-                {
-                    allJSmooth.add(Matrix::Zero(2 * nFreqs, 2 * nFreqs));
-                }
-            }
 
             while (iter < 400 && errorVal > 1e-3)
             {
+                for (int i = 0; i < nSamples; i++)
+                {
+                    allP_N_N1.add(Matrix::Zero(2 * nFreqs, 2 * nFreqs));
+                }
+
+                allXSmooth = Array<Matrix>();
+                allPSmooth = Array<Matrix>();
+                allJSmooth = Array<Matrix>();
+                for (int i = 0; i < nSamples; i++)
+                {
+                    allXSmooth.add(Matrix::Zero(2 * nFreqs, 1));
+                    allPSmooth.add(Matrix::Zero(2 * nFreqs, 2 * nFreqs));
+                    if (i != nSamples - 1)
+                    {
+                        allJSmooth.add(Matrix::Zero(2 * nFreqs, 2 * nFreqs));
+                    }
+                }
                 // run forward kalman filter
                 Array<Matrix> allX = Array<Matrix>();
                 allX.add(prevStateModel); // Append prevState
 
                 Array<Matrix> allP = Array<Matrix>();
                 allP.add(prevCovModel); // Append prevCov
+
+                //std::cout << "tmpsgmaobs: " << tempSigmaObs << std::endl;
+                //std::cout << "tempPhi b4:\n " << tempPhi << std::endl;
+                //std::cout << "tempQ b4:\n " << tempQ << std::endl;
+                //std::cout << " tempM b4:\n " << tempM << std::endl;
+
+                //std::cout << "init x: " << allX[0] << std::endl;
+                //std::cout << "init P: " << allP[0] << std::endl;
+
 
                 for (int i = 0; i < nSamples; i++)
                 {
@@ -445,8 +487,12 @@ namespace StatePhaseEst
                     oneStepKalman(newState, newStateCov, allX[i], data(i), allP[i], tempPhi, tempQ, tempSigmaObs, tempM);
                     allX.add(newState);
                     allP.add(newStateCov);
+                    double real = allX[i](0);
+                    double img = allX[i](1);
+                    //std::cout << i << " : " << newState << std::endl;
 
                 }
+                //std::cin.ignore();
                 allX.remove(0); // remove prevState
                 allP.remove(0); // remove prevCov
 
@@ -459,14 +505,27 @@ namespace StatePhaseEst
                // allJSmooth = allP;
                 //allJSmooth.remove(nSamples - 1);
 
-                for (int i = nSamples - 2; i >= 0; i--)
+                for (int i = nSamples - 1; i >= 0; i--)
                 {
                     Matrix smoothState;
                     Matrix smoothCov;
                     Matrix smoothJ;
                     int nxs = allX.size();
                     int nps = allP.size();
-                    smoother(smoothState, smoothCov, smoothJ, allXSmooth[i + 1], allX[i], allPSmooth[i + 1], allP[i], tempPhi, tempQ);
+                    if (i == nSamples - 1)
+                    {
+                        smoother(smoothState, smoothCov, smoothJ, allXSmooth[i], allX[i], allPSmooth[i], allP[i], tempPhi, tempQ);
+                        //std::cout << i << " :allX[i]: " << allX[i] << std::endl;
+                    }
+                    else
+                    {
+                        smoother(smoothState, smoothCov, smoothJ, allXSmooth[i + 1], allX[i], allPSmooth[i + 1], allP[i], tempPhi, tempQ);
+                        //std::cout << i << " :allX[i+`1]: " << allX[i+1] << std::endl;
+                    }
+                    //std::cout << i << ", smoothState: " << smoothState << std::endl;
+                    
+                    //std::cout << "allXSmooth[i + 1]: " << allXSmooth[i + 1] << std::endl;
+                   
                     //allXSmooth[i] = smoothState;
                     //allPSmooth[i] = smoothCov;
                     //allJSmooth[i] = smoothJ;
@@ -475,7 +534,7 @@ namespace StatePhaseEst
                     allJSmooth.set(i, smoothJ);
 
                 }
-
+                //std::cin.ignore();
                 /*
                 std::cout << "allXSmooth: \n" << allXSmooth[0] << std::endl;
                 std::cout << "allXSmooth end: \n" << allXSmooth[nSamples - 1] << std::endl;
@@ -494,28 +553,49 @@ namespace StatePhaseEst
                 Matrix P_N_N1 = (Identity - K * tempM.transpose()) * tempPhi * allP[nSamples - 1];
                 
                 allP_N_N1.set(nSamples-1, P_N_N1);
+                //std::cout << nSamples-1 << ", all_PNN1: " << P_N_N1 << std::endl;
 
                 for (int i = nSamples - 2; i > 0; i--)
                 {
-                    Matrix P_N_N1 = allP[i] * allJSmooth[i - 1].transpose() + allJSmooth[i] * (allP_N_N1[i + 1] - tempPhi * allP[i]) * allJSmooth[i - 1].transpose();
+                    if (i == nSamples - 1)
+                    {
+                        P_N_N1 = allP[i] * allJSmooth[i - 1].transpose() + allJSmooth[i] * (allP_N_N1[i] - tempPhi * allP[i]) * allJSmooth[i - 1].transpose();
+                    }
+                    else
+                    {
+                        P_N_N1 = allP[i] * allJSmooth[i - 1].transpose() + allJSmooth[i] * (allP_N_N1[i + 1] - tempPhi * allP[i]) * allJSmooth[i - 1].transpose();
+                    }
+                    
                     allP_N_N1.set(i, P_N_N1);
+                    //std::cout << i << ", all_PNN1: " << P_N_N1 << std::endl;
                 }
-
+                Matrix eyee;
+                allP_N_N1.set(0, eyee.setIdentity(2 * nFreqs, 2 * nFreqs));
+                //std::cout << "0" << ", all_PNN1: " << allP_N_N1[0] << std::endl;
                 //std::cout << "allpnn1: " << allP_N_N1[0] << std::endl;
                 //std::cout << "allpnn1 end: " << allP_N_N1[nSamples-1] << std::endl;
-
+                //std::cin.ignore();
 
                 // EM Alg from Soulat, 2019
                 Matrix A = P + xstart * xstart.transpose();
+                //std::cout << "pre"<< ": " << A << std::endl;
                 Matrix B = Matrix::Zero(allPSmooth[0].rows(), allPSmooth[0].cols());
                 Matrix C = Matrix::Zero(allPSmooth[0].rows(), allPSmooth[0].cols());
                 tempSigmaObs = 0;
 
                 for (int i = 0; i < nSamples; i++)
                 {
-                    if (i > 1)
+                    if (i > 0)
                     {
                         A = A + allPSmooth[i - 1] + allXSmooth[i - 1] * allXSmooth[i - 1].transpose();
+                        //std::cout << i << ": " << A << std::endl;
+                        //std::cout << i << "allPSmooth[i - 1]: " << allPSmooth[i - 1] << std::endl;
+                        //std::cout << i << "allXSmooth[i - 1]: " << allXSmooth[i - 1] << std::endl;
+                        //std::cout << i << "allXSmooth[i - 1]  * allXSmooth[i - 1].transpose: " << allXSmooth[i - 1] * allXSmooth[i - 1].transpose() << std::endl;
+                        //std::cout << i << "allPSmooth[i - 1] + allXSmooth[i - 1] * allXSmooth[i - 1].transpose(): " << allPSmooth[i - 1] + allXSmooth[i - 1] * allXSmooth[i - 1].transpose() << std::endl;
+                        //std::cout << i << "allXSmooth[i - 1].transpose: " << allXSmooth[i - 1].transpose() << std::endl;
+                        //std::cout << i << "allXSmooth[i - 1].transpose: " << allXSmooth[i - 1].transpose() << std::endl;
+                        //std::cin.get();
                         //std::cout << "all_PNNN1 cols: " << allP_N_N1[i].cols() << "\nall_PNN1 rows: " << allP_N_N1[i].rows() << std::endl;
                         //std::cout << "allx cols: " << allXSmooth[i].cols() << "\nallx rows: " << allXSmooth[i].rows() << std::endl;
                         B = B + allP_N_N1[i] + allXSmooth[i] * allXSmooth[i - 1].transpose();
@@ -527,10 +607,29 @@ namespace StatePhaseEst
                     //R = R+ M'* squeeze(newAllP(:,:,i)) * M + (y(i) - M'*newAllX(:,i)) *(y(i) - M'*newAllX(:,i))' ;
                     double temp = (tempM.transpose() * allPSmooth[i] * tempM)(0);
                     double temp1 = (tempM.transpose() * allXSmooth[i])(0);
+                    //double temp2 = (tempM.transpose() * allXSmooth[i])
                     double temp2 = (data(i) - temp1);
                     //Eigen::ArrayXXf temp2 = (tempM.transpose() * allXSmooth[i]).transpose();
+                    //std::cout << "i: " << i << std::endl;
+                    //std::cout << "tempSigmaObs1: " << tempSigmaObs << std::endl;
                     tempSigmaObs = tempSigmaObs + temp + (data(i) - temp1) * temp2;
+
+                    //std::cout << "tempM: " << tempM << std::endl;
+                    //std::cout << "appPsmooth: " << allPSmooth[i] << std::endl;
+                    //std::cout << "allXSmooth: " << allXSmooth[i] << std::endl;
+                    //std::cout << "data(i): " << data(i) << std::endl;
+                    //std::cout << "tempSigmaObs2: " << tempSigmaObs << std::endl;
+                    
+                    //std::cin.ignore();
+                    //std::cout << "temp: " << temp << std::endl;
+                    //std::cout << "temp2: " << temp2 << std::endl;
+
                 }
+                //std::cout << "a: " << A << std::endl;
+                //std::cout << "b: " << B << std::endl;
+                //std::cout << "c: " << C << std::endl;
+
+                
 
                 tempSigmaObs = (1.0 / float(nSamples)) * tempSigmaObs;
                 
@@ -555,7 +654,13 @@ namespace StatePhaseEst
 
                     freqEst(i) = (atan((BTmp(1, 0) - BTmp(0, 1)) / BTmp.trace()));
                     ampEst(i) = sqrt(pow((BTmp(1, 0) - BTmp(0, 1)), 2) + pow(BTmp.trace(), 2)) / ATmp.trace();
-                    allQ(i) = (1.0 / float(2.0 * nSamples)) * (CTmp.trace() - pow(ampEst(i), 2) * ATmp.trace());
+                    //std::cout << "CTmp.trace(): " << CTmp.trace() << std::endl;
+                    //std::cout << "pow(ampEst(i), 2): " << pow(ampEst(i), 2) << std::endl;
+                    //std::cout << " ATmp.trace(): " << ATmp.trace() << std::endl;
+                    //std::cout << " (float(2.0 * nSamples)): " << (float(2.0 * nSamples)) << std::endl;
+                    //std::cout << "CTmp.trace() - pow(ampEst(i), 2) * ATmp.trace(): " << CTmp.trace() - pow(ampEst(i), 2) * ATmp.trace() << std::endl;
+                    //std::cout << "(float(2.0 * nSamples)) *CTmp.trace() - pow(ampEst(i), 2) * ATmp.trace(): " << (float(2.0 * nSamples)) * (CTmp.trace() - pow(ampEst(i), 2) * ATmp.trace()) << std::endl;
+                    allQ(i) = 1.0 / (float(2.0 * nSamples)) * (CTmp.trace() - pow(ampEst(i), 2) * ATmp.trace());
 
                     //// ALERT CHECK AMP EST POW FUNCTION. WE NEED TO DO .^2 vs other ones are just ^2
                     // Matlab functions below
@@ -564,7 +669,14 @@ namespace StatePhaseEst
 
                 }
 
-                
+                //std::cout << "oldfreq: " << oldFreq << std::endl;
+                //std::cout << "tmpsgmaobs: " << tempSigmaObs << std::endl;
+                //std::cout << "freqest: " << freqEst << std::endl;
+                //std::cout << "ampEst: " << ampEst << std::endl;
+                //std::cout << "allQ: " << allQ << std::endl;
+
+
+                //std::cin.ignore();
                 
 
                 omega = freqEst * 1000.0 / (2.0 * M_PI);
@@ -576,24 +688,30 @@ namespace StatePhaseEst
 
 
                 /*
-                
+                std::cout << "tmpsgmaobs: " << tempSigmaObs << std::endl;
                 std::cout << "after genK tempPhi at end:\n " << tempPhi << std::endl;
                 std::cout << "after genK ampEst at end:\n " << ampEst << std::endl;
                 std::cout << "after genK freqEst at end:\n " << freqEst << std::endl;
                 std::cout << "after genK tempQ at end:\n " << tempQ << std::endl;
                 std::cout << "after genK omega at end:\n " << omega << std::endl;
-                std::cin.get();
+                std::cout << "----------------------------" << std::endl;
+                std::cin.ignore();
                 */
                 // Reset state vector
-                allX.clearQuick();
-                allX.add(allXSmooth.getLast()); // Append prevState
+                //allX.clearQuick();
+                //allX.add(allXSmooth.getLast()); // Append prevState
 
-                allP.clearQuick();
-                allP.add(allPSmooth.getLast()); // Append prevCov
+                //allP.clearQuick();
+                //allP.add(allPSmooth.getLast()); // Append prevCov
 
                 iter += 1;
                 //  MAKE SURE cwiseAbs does what we think it does
+                //std::cout << "omega: "  << omega << std::endl;
+                //std::cout << "oldFreq: "  << oldFreq << std::endl;
                 errorVal = ((omega - oldFreq).cwiseAbs()).sum();
+                //std::cout << "errorval: " << errorVal << std::endl;
+
+                //std::cin.get();
             }
 
             // Got good values send them to main thread. Maybe do this in run function
@@ -608,9 +726,10 @@ namespace StatePhaseEst
             sigmaFreqs = allQ;
             freqs = omega;
             hasBeenUsed = true;
+            std::cout << "freqs:\n" << freqs << std::endl;
 
-            std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-            /*
+            //std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+            
             std::cout << "phi:\n" << phi << std::endl;
             std::cout << "Q:\n" << Q << std::endl;
             std::cout << "M:\n" << M << std::endl;
@@ -619,17 +738,21 @@ namespace StatePhaseEst
             std::cout << "sigmaFreqs:\n" << sigmaFreqs << std::endl;
             std::cout << "freqs:\n" << freqs << std::endl;
             std::cout << "iter: " << iter << std::endl;
+
+            std::cout << "\n\n\n\n\n\n\n" << std::endl;
+            std::cout << "---------------------------" << std::endl;
+            std::cout << "\n\n\n\n\n\n\n" << std::endl;
+            std::cin.ignore();
             
             // }
 
             
-            std::cout << "Time difference fit model = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[µs]" << std::endl;
-            std::cin.get();
-            */
+           // std::cout << "Time difference fit model = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[µs]" << std::endl;
+
         }
 
         //Eigen::MatrixXf extract2x2(Matrix inputMatrix, int i)
-        Eigen::MatrixXf extract2x2(Matrix inputMatrix, int i)
+        Matrix extract2x2(Matrix inputMatrix, int i)
         {
             
             int rowcol = i * 2;
@@ -657,8 +780,9 @@ namespace StatePhaseEst
             smoothX = x_prev + smoothJ * (x - phi * x_prev);
             smoothP = P_prev + smoothJ * (P - P_one) * smoothJ.transpose();
 
+            
+            //std::cout << "smoothX:\n" << smoothX << std::endl;
             /*
-            std::cout << "smoothX:\n" << smoothX << std::endl;
             std::cout << "smoothP:\n" << smoothP << std::endl;
             std::cout << "smoothJ:\n" << smoothJ << std::endl;
             std::cout << "x:\n" << x << std::endl;
@@ -667,9 +791,11 @@ namespace StatePhaseEst
             std::cout << "P_prev:\n" << P_prev << std::endl;
             std::cout << "phi:\n" << phi << std::endl;
             std::cout << "Q:\n" << Q << std::endl;
+            std::cout << "P_one.inverse:\n" << P_one.inverse() << std::endl;
             std::cout << "P_one:\n" << P_one << std::endl;
             std::cin.get(); 
             */
+            
         }
 
         void oneStepKalman(Matrix& newState, Matrix& newStateCov, Matrix state, float measuredVal, Matrix stateCov, Matrix phi, Matrix Q, float sigmaObs, Matrix M)
@@ -689,6 +815,7 @@ namespace StatePhaseEst
             newStateCov = pEst - kalmanGain * M.transpose() * pEst;
 
             /*
+            std::cout << "---------------beg" << std::endl;
             std::cout << "newState kalman:\n" << newState << std::endl;
             std::cout << "newStateCov:\n" << newStateCov << std::endl;
             std::cout << "state:\n" << state << std::endl;
@@ -701,8 +828,10 @@ namespace StatePhaseEst
             std::cout << "kalmanGain:\n" << kalmanGain << std::endl;
             std::cout << "stateEst:\n" << stateEst << std::endl;
             std::cout << "pEst:\n" << pEst << std::endl;
+            std::cout << "-------------end" << std::endl;
             std::cin.get();
             */
+            
         }
 
         float dataFs = 30000;
@@ -711,7 +840,7 @@ namespace StatePhaseEst
         bool hasBeenUsed = false;
         bool freqsSet = false;
 
-
+       // std::ofstream myfile;
         
         int histSize;
         int stride;

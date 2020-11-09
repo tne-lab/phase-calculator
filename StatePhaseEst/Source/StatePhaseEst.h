@@ -171,7 +171,10 @@ namespace StatePhaseEst
         LowpassFilter lowFilter;
         LowpassFilter lowReverseFilter;
 
+        float histTSStart;
+        //float histTSEnd;
 
+        float curts;
 
 
         // Both use the rest

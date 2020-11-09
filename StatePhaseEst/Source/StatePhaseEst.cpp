@@ -28,6 +28,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "StatePhaseEst.h"
 #include "StatePhaseEstEditor.h"
 
+#include <iostream>
+#include <fstream>
+
 namespace StatePhaseEst
 {
     // ------- constants ------------
@@ -90,6 +93,7 @@ namespace StatePhaseEst
 
         double* data = getRawDataPointer();
 
+
         for (int nLeft = nToAdd; nLeft > 0; --nLeft)
         {
             data[headOffset--] = double(*(source++));
@@ -133,6 +137,8 @@ namespace StatePhaseEst
         : chanInfo  (cInfo)
         , PhaseAlg  (PhaseAlg)
         , sspe      ()
+        , histTSStart(0)
+        , curts(0)
     {
         update();
     }
@@ -336,7 +342,7 @@ namespace StatePhaseEst
         , winSize(1000)
         , obsErrorEst(1)
         ,sampsForeEval(0)
-        ,printedSamps(false)
+        ,printedSamps(true)
     {
         setProcessorType(PROCESSOR_TYPE_FILTER);
         setBand(ALPHA_THETA, true);
@@ -475,7 +481,6 @@ namespace StatePhaseEst
 
     void Node::process(AudioSampleBuffer& buffer)
     {
-        sampsForeEval += buffer.getNumSamples();
         // handle subprocessors, if any
         HashMap<int, uint16>::Iterator subProcIt(subProcessorMap);
         while (subProcIt.next())
@@ -494,6 +499,7 @@ namespace StatePhaseEst
             checkForEvents();
         }
 
+        //sampsForeEval += buffer.getNumSamples();
         // iterate over active input channels
         Array<int> activeChans = getActiveInputs();
         int numActiveChans = activeChans.size();
@@ -523,10 +529,21 @@ namespace StatePhaseEst
 
             // enqueue as much new data as can fit into history
             acInfo->history.enqueue(wpIn, nSamples);
+            acInfo->curts += buffer.getNumSamples();
+
+           // std::cout << "samps fore:" << sampsForeEval << std::endl;
+            //std::cout << "isfull: " << acInfo->history.isFull() << std::endl;
+            //if (acInfo->history.isFull() && printedSamps == false)
+            //{
+            //    acInfo->histTSStart = sampsForeEval;
+            //    std::cout << "samps fore: " << sampsForeEval << std::endl;
+            //}
 
             // calc phase and write out (only if AR model has been calculated)
             if (acInfo->history.isFull() && (acInfo->arModeler.hasBeenFit() || acInfo->sspe.hasBeenFit()))
             {
+                //std::cout << "samps: " << acInfo->curts - buffer.getNumSamples() << std::endl;
+                //std::cin.get();
                 int stride = acInfo->chanInfo.dsFactor;
 
                 switch (acInfo->PhaseAlg)
@@ -681,9 +698,11 @@ namespace StatePhaseEst
                 {
                     if (printedSamps == false)
                     {
+                        //std::ofstream myfile("D:\\TNEL\\oep-installation\\state-phase-est\\StatePhaseEst\\Source\\buffersamps.txt", std::ios::app);
+                        //myfile << sampsForeEval - buffer.getNumSamples() << "\n";
                         //std::cout << "Samps before first eval buf: " << sampsForeEval << std::endl;
                         //sampsForeEval = 0;
-                        //printedSamps = true;
+                        printedSamps = true;
                     }
                     
                     Array<Dsp::complex_t> htOutput = acInfo->sspe.evalBuffer( buffer.getReadPointer(chan), buffer.getNumSamples());
@@ -843,8 +862,16 @@ namespace StatePhaseEst
                     acInfo->arModeler.fitModel(reverseData);
                     break;
                 case STATE_SPACE:
+                    //int tempSamps = sampsForeEval;
+                    //std::ofstream myfile("D:\\TNEL\\oep-installation\\state-phase-est\\StatePhaseEst\\Source\\modelsamps.txt", std::ios::app);
+                    //myfile << acInfo->curts << "\n";
                     acInfo->sspe.fitModel(reverseData);
-                    printedSamps = false;
+                    std::cin.ignore();
+                    //std::cin.ignore();
+                    //std::ofstream mybuffile("D:\\TNEL\\oep-installation\\state-phase-est\\StatePhaseEst\\Source\\buffersamps.txt", std::ios::app);
+                    //mybuffile << acInfo->curts << "\n";
+                    //acInfo->histTSStart = tempSamps;
+                    //printedSamps = false;
                     break;
                 }
             }
