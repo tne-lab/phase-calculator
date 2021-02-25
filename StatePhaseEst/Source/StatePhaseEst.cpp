@@ -137,8 +137,8 @@ namespace StatePhaseEst
         : chanInfo  (cInfo)
         , PhaseAlg  (PhaseAlg)
         , sspe      ()
-        , histTSStart(0)
-        , curts(0)
+        , curts     (0)
+        , sspeFit   (false)
     {
         update();
     }
@@ -195,7 +195,7 @@ namespace StatePhaseEst
 
             newHistorySize = chanInfo.dsFactor * jmax(
                 visHilbertLengthMs * sspe.getFs() / 1000,
-                int(p.getWinSize() / 1000) * sspe.getFs());
+                10 * sspe.getFs());//int(p.getWinSize() / 1000) * sspe.getFs());10 * sspe.getFs()
 
             sspe.setHistSize(newHistorySize);
             sspe.setFreqs(p.getFreqs()); // swap from array (easy storage) to vector (easy calculations)
@@ -236,8 +236,6 @@ namespace StatePhaseEst
         case STATE_SPACE:
             lowFilter.reset();
             sspe.reset();
-            //sspe.setFreqs(chanInfo.owner.getFreqs());
-            //sspe.setDesFreqIndex(1);
         }
 
         interpCountdown = 0;
@@ -517,19 +515,26 @@ namespace StatePhaseEst
 
             // filter the data
             float* const wpIn = buffer.getWritePointer(chan);
+            const float*  rpIn = buffer.getReadPointer(chan);
+            /*for (int i = 0; i < nSamples; i++)
+            {
+                std::cout << i << ": wp : " << wpIn[i] << std::endl;
+                std::cout << i << ": rp : " << rpIn[i] << std::endl;
+            }
+            std::cin.ignore();*/
             switch (acInfo->PhaseAlg)
             {
             case HILBERT_TRANSFORMER:
                 acInfo->bandFilter.process(nSamples, &wpIn);
                 break;
             case STATE_SPACE:
-                acInfo->lowFilter.process(nSamples, &wpIn);
+                //acInfo->lowFilter.process(nSamples, &wpIn);
                 break;
             }
 
             // enqueue as much new data as can fit into history
             acInfo->history.enqueue(wpIn, nSamples);
-            acInfo->curts += buffer.getNumSamples();
+            acInfo->curts += nSamples;
 
            // std::cout << "samps fore:" << sampsForeEval << std::endl;
             //std::cout << "isfull: " << acInfo->history.isFull() << std::endl;
@@ -542,8 +547,8 @@ namespace StatePhaseEst
             // calc phase and write out (only if AR model has been calculated)
             if (acInfo->history.isFull() && (acInfo->arModeler.hasBeenFit() || acInfo->sspe.hasBeenFit()))
             {
-                //std::cout << "samps: " << acInfo->curts - buffer.getNumSamples() << std::endl;
-                //std::cin.get();
+                std::cout << "samps: " << acInfo->curts - buffer.getNumSamples() << std::endl;
+                std::cin.get();
                 int stride = acInfo->chanInfo.dsFactor;
 
                 switch (acInfo->PhaseAlg)
@@ -704,8 +709,19 @@ namespace StatePhaseEst
                         //sampsForeEval = 0;
                         printedSamps = true;
                     }
-                    
-                    Array<Dsp::complex_t> htOutput = acInfo->sspe.evalBuffer( buffer.getReadPointer(chan), buffer.getNumSamples());
+                    int maxHistoryLength = 0;
+                    maxHistoryLength = jmax(maxHistoryLength, chanInfo->acInfo->history.size());
+                    Array<double> reverseData;
+                    reverseData.resize(maxHistoryLength);
+
+                    double* dataPtr = reverseData.getRawDataPointer();
+                    acInfo->history.unwrapAndCopy(dataPtr, true);
+                    //const float * rpBuf = buffer.getReadPointer(1);
+                    //for (int i = 0; i < nSamples; i++)
+                    //{
+                    //    std::cout << i << " :rpbuf long: " << rpBuf[i] << std::endl;
+                    //}
+                    Array<Dsp::complex_t> htOutput = acInfo->sspe.evalBuffer(buffer.getReadPointer(chan), nSamples);
                     
                     //float* wpOut = buffer.getWritePointer(chan);
                     /*
@@ -862,16 +878,11 @@ namespace StatePhaseEst
                     acInfo->arModeler.fitModel(reverseData);
                     break;
                 case STATE_SPACE:
-                    //int tempSamps = sampsForeEval;
-                    //std::ofstream myfile("D:\\TNEL\\oep-installation\\state-phase-est\\StatePhaseEst\\Source\\modelsamps.txt", std::ios::app);
-                    //myfile << acInfo->curts << "\n";
-                    acInfo->sspe.fitModel(reverseData);
-                    std::cin.ignore();
-                    //std::cin.ignore();
-                    //std::ofstream mybuffile("D:\\TNEL\\oep-installation\\state-phase-est\\StatePhaseEst\\Source\\buffersamps.txt", std::ios::app);
-                    //mybuffile << acInfo->curts << "\n";
-                    //acInfo->histTSStart = tempSamps;
-                    //printedSamps = false;
+                    if (acInfo->sspeFit == false)
+                    {
+                        acInfo->sspe.fitModel(reverseData);
+                        acInfo->sspeFit = true;
+                    }
                     break;
                 }
             }

@@ -156,6 +156,7 @@ namespace StatePhaseEst
 
         // SSPE decs
         SSPE sspe;
+        bool sspeFit;
         //Matrix phi;
         //Matrix Q;
         //Matrix M;
@@ -171,11 +172,7 @@ namespace StatePhaseEst
         LowpassFilter lowFilter;
         LowpassFilter lowReverseFilter;
 
-        float histTSStart;
-        //float histTSEnd;
-
         float curts;
-
 
         // Both use the rest
         ReverseStack history;

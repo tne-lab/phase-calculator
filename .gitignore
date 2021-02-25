@@ -3,6 +3,10 @@
 # 1. intermediate files
 *.o
 *.d
+*.csv
+*.fig
+*.png
+*.m
 
 
 # 2. Build files

@@ -277,24 +277,8 @@ namespace StatePhaseEst
         addAndMakeVisible(freqOneLabel);
         addAndMakeVisible(freqOneButton);
 
-        winSizeLabel = new Label("winSizeL", "Win Size:");
-        winSizeLabel->setBounds(filterWidth, 25, 60, 20);
-        winSizeLabel->setFont({ "Small Text", 12, Font::plain });
-        winSizeLabel->setColour(Label::textColourId, Colours::darkgrey);
-        addAndMakeVisible(winSizeLabel);
-
-        winSizeEditable = new Label("winSizeE");
-        winSizeEditable->setEditable(true);
-        winSizeEditable->addListener(this);
-        winSizeEditable->setText(String(p->winSize), dontSendNotification);
-        winSizeEditable->setBounds(filterWidth + 62, 25, 45, 18);
-        winSizeEditable->setColour(Label::backgroundColourId, Colours::grey);
-        winSizeEditable->setColour(Label::textColourId, Colours::white);
-        addAndMakeVisible(winSizeEditable);
-
-
         obsErrorLabel = new Label("obsErrorL", "Obs Err:");
-        obsErrorLabel->setBounds(filterWidth, 25 + 21, 65, 20);
+        obsErrorLabel->setBounds(filterWidth, 25, 65, 20);
         obsErrorLabel->setFont({ "Small Text", 12, Font::plain });
         obsErrorLabel->setColour(Label::textColourId, Colours::darkgrey);
         addAndMakeVisible(obsErrorLabel);
@@ -303,7 +287,7 @@ namespace StatePhaseEst
         obsErrorEditable->setEditable(true);
         obsErrorEditable->addListener(this);
         obsErrorEditable->setText(String(p->obsErrorEst), dontSendNotification);
-        obsErrorEditable->setBounds(filterWidth + 62, 25 + 21, 45, 18);
+        obsErrorEditable->setBounds(filterWidth + 62, 25, 45, 18);
         obsErrorEditable->setColour(Label::backgroundColourId, Colours::grey);
         obsErrorEditable->setColour(Label::textColourId, Colours::white);
         addAndMakeVisible(obsErrorEditable);
@@ -520,16 +504,6 @@ namespace StatePhaseEst
                 processor->setParameter(FREQ_THREE, floatInput);
             }
         }
-        else if (labelThatHasChanged == winSizeEditable)
-        {
-            float floatInput;
-            bool valid = updateControl(labelThatHasChanged, 0.0f, FLT_MAX, processor->winSize, floatInput);
-
-            if (valid)
-            {
-                processor->setParameter(WIN_SIZE, floatInput);
-            }
-        }
         /*
         else if (labelThatHasChanged == ampEstEditable)
         {
@@ -743,7 +717,6 @@ namespace StatePhaseEst
             break;
         case STATE_SPACE:
             paramValues->setAttribute("phaseAlg", STATE_SPACE);
-            paramValues->setAttribute("winSize", processor->winSize);
             paramValues->setAttribute("obsErrorEst", processor->obsErrorEst);
             paramValues->setAttribute("foi", processor->getFoi());
             paramValues->setAttribute("nFreqs", processor->freqs.size());
@@ -796,7 +769,6 @@ namespace StatePhaseEst
                 phaseSelectBox->setVisible(false);
                 createSSPEComponents();
 
-                winSizeEditable->setText(xmlNode->getStringAttribute("winSize", winSizeEditable->getText()), sendNotificationSync);
                 obsErrorEditable->setText(xmlNode->getStringAttribute("obsErrorEst", obsErrorEditable->getText()), sendNotificationSync);
                 int nFreqs = xmlNode->getStringAttribute("nFreqs", "1").getIntValue();
 

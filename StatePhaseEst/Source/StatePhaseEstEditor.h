@@ -192,8 +192,6 @@ namespace StatePhaseEst
         ScopedPointer<ToggleButton> freqTwoButton;
         ScopedPointer<ToggleButton> freqThreeButton;
 
-        ScopedPointer<Label> winSizeLabel;
-        ScopedPointer<Label> winSizeEditable;
         ScopedPointer<Label> obsErrorLabel;
         ScopedPointer<Label> obsErrorEditable;
 
