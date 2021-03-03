@@ -201,6 +201,7 @@ namespace StatePhaseEst
             sspe.setFreqs(p.getFreqs()); // swap from array (easy storage) to vector (easy calculations)
             sspe.setDesFreqIndex(p.getFoi());
             sspe.setParams(DATA_FS, chanInfo.sampleRate);
+            sspe.setParams(STRIDE, chanInfo.dsFactor);
             sspe.setParams(OBS_ERR_EST_SSPE, p.getObsErrorEst());
 
             hilbertLengthMultiplier = sspe.getFs() * chanInfo.dsFactor / 1000;
@@ -528,7 +529,7 @@ namespace StatePhaseEst
                 acInfo->bandFilter.process(nSamples, &wpIn);
                 break;
             case STATE_SPACE:
-                //acInfo->lowFilter.process(nSamples, &wpIn);
+                acInfo->lowFilter.process(nSamples, &wpIn);
                 break;
             }
 
@@ -547,10 +548,9 @@ namespace StatePhaseEst
             // calc phase and write out (only if AR model has been calculated)
             if (acInfo->history.isFull() && (acInfo->arModeler.hasBeenFit() || acInfo->sspe.hasBeenFit()))
             {
-                std::cout << "samps: " << acInfo->curts - buffer.getNumSamples() << std::endl;
-                std::cin.get();
+                //std::cout << "samps: " << acInfo->curts - buffer.getNumSamples() << std::endl;
+                //std::cin.get();
                 int stride = acInfo->chanInfo.dsFactor;
-
                 switch (acInfo->PhaseAlg)
                 {
                 case HILBERT_TRANSFORMER:

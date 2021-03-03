@@ -32,6 +32,7 @@ namespace StatePhaseEst
     enum SSPE_PARAM
     {
         DATA_FS,
+        STRIDE,
         OBS_ERR_EST_SSPE
     };
 
@@ -105,7 +106,10 @@ namespace StatePhaseEst
             {
             case DATA_FS:
                 dataFs = value;
-                stride = dataFs / fs;
+                //stride = dataFs / fs;
+                break;
+            case STRIDE:
+                stride = value;
                 break;
             case OBS_ERR_EST_SSPE:
                 obsErrorEst = value;
@@ -167,22 +171,29 @@ namespace StatePhaseEst
             //std::cout << "nsamples: " << nSamples << std::endl;
             //int bufStart = histSize - nSamples;
             Array<Matrix> allX = Array<Matrix>();
-            allX.resize((int(nSamples) /stride) + 1);
+            int arraySize = (nSamples / stride)+1;
+            allX.resize(arraySize);
             allX.set(0,prevState); // Append prevState
+            std::cout << "all x size : " << allX.size() << std::endl;
 
             Array<Matrix> allP = Array<Matrix>();
-            allP.resize((int(nSamples) / stride) + 1);
+            allP.resize(arraySize);
             allP.set(0,prevCov); // Append prevCov
+            
 
             int endInd = 0;
-            //std::cout << "Nsamples/stride: " << nSamples / stride << std::endl;
+            std::cout << "Nsamples/stride: " << nSamples / stride << std::endl;
+            std::cout << "Nsamples: " << nSamples  << std::endl;
+            std::cout << "stride: " << stride << std::endl;
 
             //for (int i = 0; i <nSamples; i++)
             //{
             //    std::cout << i << " :rpbuf long: " << history[bufStart + i] << std::endl;
             //}
 
-            for (int i = 1; i <=(nSamples / stride); i++)
+            
+
+            for (int i = 1; i <= arraySize; i++)
             {
                 Matrix newState;
                 Matrix newStateCov;
@@ -199,16 +210,17 @@ namespace StatePhaseEst
                 allP.set(i,newStateCov);
                 endInd += 1;
             }
+            std::cout << "endInd: " << endInd << std::endl;
             
             Array<std::complex<double>> complexArray = Array<std::complex<double>>();
-            //complexArray.resize(endInd-1);
-            complexArray.removeRange(0, 1);
+            complexArray.resize(endInd-1);
+            //complexArray.removeRange(0, 1);
             prevState = allX[endInd - 1];
             prevCov = allP[endInd - 1];
             //std::cout << "endInd: " << endInd << std::endl;
             //std::cin.ignore();
             int cmpInd = 0;
-            for (int i = 1; i < endInd; i++, cmpInd++)
+            for (int i = 1; i <= endInd; i++, cmpInd++)
             {
                  complexArray.set(cmpInd,std::complex<double>(allX[i](foiIndex, 0), allX[i](foiIndex + 1, 0)));
             }
@@ -217,7 +229,7 @@ namespace StatePhaseEst
             //std::ofstream myfile("D:\\TNEL\\oep-installation\\state-phase-est\\StatePhaseEst\\Source\\bufspeed2048.csv", std::ios::app);
             //std::cout << nSamples << "\n";
             //myfile << std::fixed << std::setprecision(dbl::max_digits10 + 2) << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << ",";
-            
+
             //std::cout << "Time difference fit model = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[µs]" << std::endl;
             //std::cin.ignore();
             return complexArray;      
@@ -332,7 +344,7 @@ namespace StatePhaseEst
             std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
             //int stride = 40000 / fs;
             int stride = dataFs / fs;
-            std::ofstream myfile("D:\\TNEL\\oep-installation\\state-phase-est\\StatePhaseEst\\Source\\bufdat.csv", std::ios::app);
+            std::ofstream myfile("D:\\TNEL\\oep-installation\\state-phase-est\\StatePhaseEst\\Source\\bufdat33155.csv", std::ios::app);
            // std::cout << "Stride: " << stride << std::endl;
            // std::cout << "data Size: " << data_array.size() << std::endl;
             const double* inputSeries = data_array.begin();
