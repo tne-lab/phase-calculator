@@ -234,9 +234,9 @@ namespace StatePhaseEst
         numFreqsBox->addListener(this);
         addAndMakeVisible(numFreqsBox);
 
-        createFreqArrayLabelEdit(freqOneLabel, freqOneEditable, 0);
-        createFreqArrayLabelEdit(freqTwoLabel, freqTwoEditable, 1);
-        createFreqArrayLabelEdit(freqThreeLabel, freqThreeEditable, 2);
+        createFreqArrayLabelEdit(freqOneLabel, freqOneEditable, covOneLabel, covOneEditable, 0);
+        createFreqArrayLabelEdit(freqTwoLabel, freqTwoEditable, covTwoLabel, covTwoEditable, 1);
+        createFreqArrayLabelEdit(freqThreeLabel, freqThreeEditable, covThreeLabel, covThreeEditable, 2);
 
 
         foiLabel = new Label("foiL", "FOI");
@@ -277,6 +277,11 @@ namespace StatePhaseEst
         addAndMakeVisible(freqOneLabel);
         addAndMakeVisible(freqOneButton);
 
+        covOneEditable->setText(String(p->qEst[0]), dontSendNotification);
+        addAndMakeVisible(covOneEditable);
+        addAndMakeVisible(covOneLabel);
+
+
         obsErrorLabel = new Label("obsErrorL", "Obs Err:");
         obsErrorLabel->setBounds(filterWidth, 25, 65, 20);
         obsErrorLabel->setFont({ "Small Text", 12, Font::plain });
@@ -291,7 +296,22 @@ namespace StatePhaseEst
         obsErrorEditable->setColour(Label::backgroundColourId, Colours::grey);
         obsErrorEditable->setColour(Label::textColourId, Colours::white);
         addAndMakeVisible(obsErrorEditable);
+        /*
+        covarianceLabel = new Label("covarianceL", "Covariance:");
+        covarianceLabel->setBounds(filterWidth, 25 + 21, 65, 20);
+        covarianceLabel->setFont({ "Small Text", 12, Font::plain });
+        covarianceLabel->setColour(Label::textColourId, Colours::darkgrey);
+        addAndMakeVisible(covarianceLabel);
 
+        covarianceEditable = new Label("covarianceE");
+        covarianceEditable->setEditable(true);
+        covarianceEditable->addListener(this);
+        covarianceEditable->setText(String(p->obsErrorEst), dontSendNotification);
+        covarianceEditable->setBounds(filterWidth + 62, 25 + 21, 45, 18);
+        covarianceEditable->setColour(Label::backgroundColourId, Colours::grey);
+        covarianceEditable->setColour(Label::textColourId, Colours::white);
+        addAndMakeVisible(covarianceEditable);
+        */
         // Set defualt vals
         freqOneButton->setToggleState(false, dontSendNotification);
         freqTwoButton->setToggleState(false, dontSendNotification);
@@ -304,11 +324,21 @@ namespace StatePhaseEst
             addAndMakeVisible(freqThreeEditable);
             addAndMakeVisible(freqThreeButton);
             freqThreeEditable->setText(String(p->freqs[2]), dontSendNotification);
+
+            addAndMakeVisible(covThreeLabel);
+            addAndMakeVisible(covThreeEditable);
+            covThreeEditable->setText(String(p->qEst[2]), dontSendNotification);
+
+            // drop through
         case 2:
             addAndMakeVisible(freqTwoLabel);
             addAndMakeVisible(freqTwoEditable);
             addAndMakeVisible(freqTwoButton);
             freqTwoEditable->setText(String(p->freqs[1]), dontSendNotification);
+
+            addAndMakeVisible(covTwoLabel);
+            addAndMakeVisible(covTwoEditable);
+            covTwoEditable->setText(String(p->qEst[1]), dontSendNotification);
             break;
         }
 
@@ -327,9 +357,10 @@ namespace StatePhaseEst
 
     }
 
-    void Editor::createFreqArrayLabelEdit(ScopedPointer<Label>& freqLabel, ScopedPointer<Label>& freqEditable, int num)
+    void Editor::createFreqArrayLabelEdit(ScopedPointer<Label>& freqLabel, ScopedPointer<Label>& freqEditable, ScopedPointer<Label>& covLabel, ScopedPointer<Label>& covEditable, int num)
     {
-        freqLabel = new Label("nFreq" + String(0) + "L", "Freq:");
+        // create Freq label and editable
+        freqLabel = new Label("nFreq" + String(num) + "L", "Freq:");
         freqLabel->setBounds(5, 65 + 21 * num, 50, 20);
         freqLabel->setFont({ "Small Text", 12, Font::plain });
         freqLabel->setColour(Label::textColourId, Colours::darkgrey);
@@ -341,6 +372,20 @@ namespace StatePhaseEst
         freqEditable->setColour(Label::backgroundColourId, Colours::grey);
         freqEditable->setColour(Label::textColourId, Colours::white);
         // freqEditable]->setTooltip(arOrderTooltip);                           // Change me!
+
+        // create covairance label and editable
+        covLabel = new Label("cov" + String(num) + "L", "Q:");
+        covLabel->setBounds(115, 65 + 21 * num, 50, 20);
+        covLabel->setFont({ "Small Text", 12, Font::plain });
+        covLabel->setColour(Label::textColourId, Colours::darkgrey);
+
+        covEditable = new Label("cov" + String(num) + "E");
+        covEditable->setEditable(true);
+        covEditable->addListener(this);
+        covEditable->setBounds(135, 65 + 21 * num, 33, 18);
+        covEditable->setColour(Label::backgroundColourId, Colours::grey);
+        covEditable->setColour(Label::textColourId, Colours::white);
+
     }
 
     void Editor::comboBoxChanged(ComboBox* comboBoxThatHasChanged)
@@ -362,8 +407,6 @@ namespace StatePhaseEst
             processor->setParameter(PHASE_ALG, phaseAlg);
             phaseSelectLabel->setVisible(false);
             phaseSelectBox->setVisible(false);
-            std::cout << "phase alg: " << phaseAlg << std::endl;
-            std::cout << "sspe: " << STATE_SPACE << std::endl;
             switch (phaseAlg)
             {
             case HILBERT_TRANSFORMER:
@@ -386,6 +429,11 @@ namespace StatePhaseEst
             freqTwoEditable->setVisible(false);
             freqTwoLabel->setVisible(false);
             freqTwoButton->setVisible(false);
+
+            covThreeEditable->setVisible(false);
+            covThreeLabel->setVisible(false);
+            covTwoEditable->setVisible(false);
+            covTwoLabel->setVisible(false);
 
             processor->setParameter(N_FREQS, nFreqs);
 
@@ -412,16 +460,26 @@ namespace StatePhaseEst
             switch (nFreqs)
             {
             case 3:
+                // freqs
                 addAndMakeVisible(freqThreeLabel);
                 addAndMakeVisible(freqThreeEditable);
                 addAndMakeVisible(freqThreeButton);
                 processor->setParameter(FREQ_THREE, freqThreeEditable->getText().getFloatValue());
+                // covariance
+                addAndMakeVisible(covThreeLabel);
+                addAndMakeVisible(covThreeEditable);
+                processor->setParameter(Q_EST_THREE, covThreeEditable->getText().getFloatValue());
                 // drop through
             case 2:
+                // freqs
                 addAndMakeVisible(freqTwoLabel);
                 addAndMakeVisible(freqTwoEditable);
                 addAndMakeVisible(freqTwoButton);
                 processor->setParameter(FREQ_TWO, freqTwoEditable->getText().getFloatValue());
+                // covariance
+                addAndMakeVisible(covTwoLabel);
+                addAndMakeVisible(covTwoEditable);
+                processor->setParameter(Q_EST_TWO, covTwoEditable->getText().getFloatValue());
                 break;
             case 1:
                 processor->updateActiveChannels(); // Just in case FOI gets updated. 
@@ -535,6 +593,37 @@ namespace StatePhaseEst
             {
                 processor->setParameter(OBS_ERR_EST, floatInput);
             }
+        }
+
+        else if (labelThatHasChanged == covOneEditable)
+        {
+            float floatInput;
+            bool valid = updateControl(labelThatHasChanged, 0.0f, FLT_MAX, processor->qEst[0], floatInput);
+
+            if (valid)
+            {
+                processor->setParameter(Q_EST_ONE, floatInput);
+            }
+        }
+        else if (labelThatHasChanged == covTwoEditable)
+        {
+        float floatInput;
+        bool valid = updateControl(labelThatHasChanged, 0.0f, FLT_MAX, processor->qEst[1], floatInput);
+
+        if (valid)
+        {
+            processor->setParameter(Q_EST_TWO, floatInput);
+        }
+        }
+        else if (labelThatHasChanged == covThreeEditable)
+        {
+        float floatInput;
+        bool valid = updateControl(labelThatHasChanged, 0.0f, FLT_MAX, processor->qEst[2], floatInput);
+
+        if (valid)
+        {
+            processor->setParameter(Q_EST_THREE, floatInput);
+        }
         }
     }
 
@@ -724,6 +813,8 @@ namespace StatePhaseEst
             for (int i = 0; i < processor->freqs.size(); i++)
             {
                 paramValues->setAttribute("freq_"+String(i+1), processor->freqs[i]);
+                paramValues->setAttribute("qEst_" + String(i + 1), processor->qEst[i]);
+               
             }
             break;
         }
@@ -780,13 +871,22 @@ namespace StatePhaseEst
                     addAndMakeVisible(freqThreeEditable);
                     addAndMakeVisible(freqThreeButton);
                     freqThreeEditable->setText(xmlNode->getStringAttribute("freq_3", freqThreeEditable->getText()), sendNotificationSync);
+
+                    addAndMakeVisible(covThreeEditable);
+                    addAndMakeVisible(covThreeLabel);
+                    covThreeEditable->setText(xmlNode->getStringAttribute("qEst_3", covThreeEditable->getText()), sendNotificationSync);
                 case 2:
                     addAndMakeVisible(freqTwoLabel);
                     addAndMakeVisible(freqTwoEditable);
                     addAndMakeVisible(freqTwoButton);
                     freqTwoEditable->setText(xmlNode->getStringAttribute("freq_2", freqTwoEditable->getText()), sendNotificationSync);
+
+                    addAndMakeVisible(covTwoEditable);
+                    addAndMakeVisible(covTwoLabel);
+                    covTwoEditable->setText(xmlNode->getStringAttribute("qEst_2", covTwoEditable->getText()), sendNotificationSync);
                 case 1:
                     freqOneEditable->setText(xmlNode->getStringAttribute("freq_1", freqOneEditable->getText()), sendNotificationSync);
+                    covOneEditable->setText(xmlNode->getStringAttribute("qEst_1", covOneEditable->getText()), sendNotificationSync);
                     break;
                 }
 

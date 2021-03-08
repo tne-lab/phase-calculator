@@ -77,7 +77,9 @@ namespace StatePhaseEst
         PHASE_ALG,
         WIN_SIZE,
         AMP_EST,
-        Q_EST,
+        Q_EST_ONE,
+        Q_EST_TWO,
+        Q_EST_THREE,
         OBS_ERR_EST,
         FREQ_ONE,
         FREQ_TWO,
@@ -352,6 +354,7 @@ namespace StatePhaseEst
         Array<float> getFreqs() const;
         int getFoi() const;
         float getObsErrorEst() const;
+        float getQEst(int index) const;
         float getWinSize() const;
 
         // reads from the visPhaseBuffer if it can acquire a TryLock. returns true if successful.
@@ -504,6 +507,7 @@ namespace StatePhaseEst
         // SSPE defaults
         float winSize;
         float obsErrorEst;
+        Array<float> qEst;
 
         // Indicate type of phase alg to use
         int curPhaseAlg;

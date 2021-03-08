@@ -179,7 +179,7 @@ namespace StatePhaseEst
         ScopedPointer<Label> numFreqsLabel;
         ScopedPointer<ComboBox> numFreqsBox;
 
-        void createFreqArrayLabelEdit(ScopedPointer<Label>& freqLabel, ScopedPointer<Label>& freqEditable, int num);
+        void createFreqArrayLabelEdit(ScopedPointer<Label>& freqLabel, ScopedPointer<Label>& freqEditable, ScopedPointer<Label>& covLabel, ScopedPointer<Label>& covEditable, int num);
         ScopedPointer<Label> freqOneLabel;
         ScopedPointer<Label> freqOneEditable;
         ScopedPointer<Label> freqTwoLabel;
@@ -194,9 +194,12 @@ namespace StatePhaseEst
 
         ScopedPointer<Label> obsErrorLabel;
         ScopedPointer<Label> obsErrorEditable;
-
-
-
+        ScopedPointer<Label> covOneLabel;
+        ScopedPointer<Label> covOneEditable;
+        ScopedPointer<Label> covTwoLabel;
+        ScopedPointer<Label> covTwoEditable;
+        ScopedPointer<Label> covThreeLabel;
+        ScopedPointer<Label> covThreeEditable;
 
 
         // constants

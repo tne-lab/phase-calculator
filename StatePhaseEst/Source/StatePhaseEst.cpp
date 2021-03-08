@@ -203,6 +203,9 @@ namespace StatePhaseEst
             sspe.setParams(DATA_FS, chanInfo.sampleRate);
             sspe.setParams(STRIDE, chanInfo.dsFactor);
             sspe.setParams(OBS_ERR_EST_SSPE, p.getObsErrorEst());
+            sspe.setParams(Q_EST_ONE, p.getQEst(0));
+            sspe.setParams(Q_EST_TWO, p.getQEst(1));
+            sspe.setParams(Q_EST_THREE, p.getQEst(2));
 
             hilbertLengthMultiplier = sspe.getFs() * chanInfo.dsFactor / 1000;
             break;
@@ -233,10 +236,12 @@ namespace StatePhaseEst
             bandFilter.reset();
             arModeler.reset();
             FloatVectorOperations::clear(htState.begin(), htState.size());
+            
 
         case STATE_SPACE:
             lowFilter.reset();
             sspe.reset();
+            //interpCountdown = chanInfo.dsFactor;
         }
 
         interpCountdown = 0;
@@ -349,6 +354,11 @@ namespace StatePhaseEst
         freqs.add(5);
         freqs.add(20);
         freqs.add(140);
+
+        qEst = Array<float>();
+        qEst.add(50);
+        qEst.add(50);
+        qEst.add(50);
     }
 
     Node::~Node() {}
@@ -467,8 +477,21 @@ namespace StatePhaseEst
             obsErrorEst = newValue;
             updateActiveChannels();
             break;
+        case Q_EST_ONE:
+            qEst.set(0, newValue);
+            updateActiveChannels();
+            break;
+        case Q_EST_TWO:
+            qEst.set(1, newValue);
+            updateActiveChannels();
+            break;
+        case Q_EST_THREE:
+            qEst.set(2, newValue);
+            updateActiveChannels();
+            break;
         case N_FREQS:
             freqs.resize(int(newValue));
+            qEst.resize(int(newValue));
            // updateActiveChannels();
             break;
         case FOI:
@@ -593,6 +616,7 @@ namespace StatePhaseEst
                             htOutput.set(kOut, std::complex<double>(rc, ic));
                         }
                     }
+                    std::cout << "ht pc size: " << htOutput.size() << std::endl;
 
                     // copy state to transform prediction without changing the end-of-buffer state
                     htTempState = acInfo->htState;
@@ -696,6 +720,8 @@ namespace StatePhaseEst
                         unwrapBuffer(wpOut, nSamples, acInfo->lastPhase);
                         smoothBuffer(wpOut, nSamples, acInfo->lastPhase);
                         acInfo->lastPhase = wpOut[nSamples - 1];
+                        std::cout << "nsamp:L " << nSamples << std::endl;
+                        std::cout << "stride: " << stride << std::endl;
                     }
                     break;
                 }
@@ -722,14 +748,18 @@ namespace StatePhaseEst
                     //    std::cout << i << " :rpbuf long: " << rpBuf[i] << std::endl;
                     //}
                     Array<Dsp::complex_t> htOutput = acInfo->sspe.evalBuffer(buffer.getReadPointer(chan), nSamples);
+                    //std::cout << "ht size: " << htOutput.size() << std::endl;
                     
                     //float* wpOut = buffer.getWritePointer(chan);
-                    /*
-                    for (int i = 0; i < htOutput.size(); i++)
-                    {
-                        std::cout << float(std::arg(htOutput[i]) * 180.0 / Dsp::doublePi) <<std::endl;
-                    }
-                    std::cin.get();*/
+                    
+                    //for (int i = 0; i < htOutput.size(); i++)
+                    //{
+                    //    std::cout << float(std::arg(htOutput[i]) * 180.0 / Dsp::doublePi) <<std::endl;
+                    //}
+                    //std::cout << "htoutsize: " << htOutput.size();
+                    //std::cout << "buf size: " << nSamples << std::endl;
+                    //std::cout << "stride: " << stride << std::endl;
+                    //std::cin.get();
                     //acInfo->lastPhase = wpOut[SSPEout.size() - 1];
                    
                     // output with upsampling (interpolation)
@@ -737,10 +767,11 @@ namespace StatePhaseEst
 
                     double nextComputedPhase, phaseStep;
                     double nextComputedMag, magStep;
+                    float lastphase = 0;
 
                     nextComputedPhase = std::arg(htOutput[0]);
                     phaseStep = circDist(nextComputedPhase, acInfo->lastComputedPhase, Dsp::doublePi) / stride;
-
+                    std::cout <<"\n\nstarting interp: " << acInfo->interpCountdown << std::endl;
                     for (int i = 0, frame = 0; i < nSamples; ++i, --acInfo->interpCountdown)
                     {
                         if (acInfo->interpCountdown == 0)
@@ -752,8 +783,6 @@ namespace StatePhaseEst
                             acInfo->lastComputedPhase = nextComputedPhase;
                             nextComputedPhase = std::arg(htOutput[frame]);
                             phaseStep = circDist(nextComputedPhase, acInfo->lastComputedPhase, Dsp::doublePi) / stride;
-
-
                         }
 
                         double thisPhase;
@@ -762,15 +791,28 @@ namespace StatePhaseEst
 
 
                         //std::cout << float(thisPhase * (180.0 / Dsp::doublePi)) << std::endl;
+                        if (float(thisPhase * (180.0 / Dsp::doublePi)) < lastphase)
+                        {
+                            std::cout << "i: " << i << std::endl;
+                            std::cout << "frame: " << frame << std::endl;
+                            std::cout << " interpcountl: " << acInfo->interpCountdown << std::endl;
+                            std::cout << "lastPhase: " << float(acInfo->lastComputedPhase * (180.0 / Dsp::doublePi)) << std::endl;
+                            std::cout << " phasesetep : " << phaseStep << std::endl;
+                            std::cout << "nextComputedPhase: " << nextComputedPhase << std::endl;
+                            std::cin.get();
+                        }
                         wpOut[i] = float(thisPhase * (180.0 / Dsp::doublePi));
+                        lastphase = float(thisPhase * (180.0 / Dsp::doublePi));
 
                     }
+                    //std::cin.get();
                     // unwrapping / smoothing
                     if (outputMode == PH || outputMode == PH_AND_MAG)
                     {
                         unwrapBuffer(wpOut, nSamples, acInfo->lastPhase);
                         smoothBuffer(wpOut, nSamples, acInfo->lastPhase);
                         acInfo->lastPhase = wpOut[nSamples - 1];
+
                     }
                     break;
                 }
@@ -1012,6 +1054,11 @@ namespace StatePhaseEst
     float Node::getObsErrorEst() const
     {
         return obsErrorEst;
+    }
+
+    float Node::getQEst(int index) const
+    {
+        return qEst[index];
     }
 
     bool Node::tryToReadVisPhases(std::queue<double>& other)

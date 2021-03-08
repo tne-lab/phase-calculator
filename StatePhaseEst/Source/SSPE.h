@@ -33,7 +33,10 @@ namespace StatePhaseEst
     {
         DATA_FS,
         STRIDE,
-        OBS_ERR_EST_SSPE
+        OBS_ERR_EST_SSPE,
+        Q_EST_ONE_SSPE,
+        Q_EST_TWO_SSPE,
+        Q_EST_THREE_SSPE
     };
 
     // generate variables to guess on quality of phase esimtation
@@ -114,7 +117,17 @@ namespace StatePhaseEst
             case OBS_ERR_EST_SSPE:
                 obsErrorEst = value;
                 break;
+            case Q_EST_ONE_SSPE:
+                qEst[0] = value;
+                break;
+            case Q_EST_TWO_SSPE:
+                qEst[1] = value;
+                break;
+            case Q_EST_THREE_SSPE:
+                qEst[2] = value;
+                break;
             }
+           
             return true;
         }
 
@@ -174,7 +187,7 @@ namespace StatePhaseEst
             int arraySize = (nSamples / stride)+1;
             allX.resize(arraySize);
             allX.set(0,prevState); // Append prevState
-            std::cout << "all x size : " << allX.size() << std::endl;
+            //std::cout << "all x size : " << allX.size() << std::endl;
 
             Array<Matrix> allP = Array<Matrix>();
             allP.resize(arraySize);
@@ -182,9 +195,9 @@ namespace StatePhaseEst
             
 
             int endInd = 0;
-            std::cout << "Nsamples/stride: " << nSamples / stride << std::endl;
-            std::cout << "Nsamples: " << nSamples  << std::endl;
-            std::cout << "stride: " << stride << std::endl;
+            //std::cout << "Nsamples/stride: " << nSamples / stride << std::endl;
+            //std::cout << "Nsamples: " << nSamples  << std::endl;
+            //std::cout << "stride: " << stride << std::endl;
 
             //for (int i = 0; i <nSamples; i++)
             //{
@@ -210,13 +223,13 @@ namespace StatePhaseEst
                 allP.set(i,newStateCov);
                 endInd += 1;
             }
-            std::cout << "endInd: " << endInd << std::endl;
+            //std::cout << "endInd: " << endInd << std::endl;
             
             Array<std::complex<double>> complexArray = Array<std::complex<double>>();
-            complexArray.resize(endInd-1);
+            complexArray.resize(arraySize-1);
             //complexArray.removeRange(0, 1);
-            prevState = allX[endInd - 1];
-            prevCov = allP[endInd - 1];
+            prevState = allX.getLast();
+            prevCov = allP.getLast();
             //std::cout << "endInd: " << endInd << std::endl;
             //std::cin.ignore();
             int cmpInd = 0;
@@ -344,7 +357,8 @@ namespace StatePhaseEst
             std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
             //int stride = 40000 / fs;
             int stride = dataFs / fs;
-            std::ofstream myfile("D:\\TNEL\\oep-installation\\state-phase-est\\StatePhaseEst\\Source\\bufdat33155.csv", std::ios::app);
+            //std::ofstream myfile("D:\\TNEL\\oep-installation\\state-phase-est\\StatePhaseEst\\Source\\bufdat33210.csv", std::ios::app);
+            std::ofstream myfile("C:\\Users\\Ephys\\Documents\\Github\\OE\\oecmake\\phase-calculator\\StatePhaseEst\\Source\\bufdat_justsin.csv", std::ios::app);
            // std::cout << "Stride: " << stride << std::endl;
            // std::cout << "data Size: " << data_array.size() << std::endl;
             const double* inputSeries = data_array.begin();
@@ -781,7 +795,7 @@ namespace StatePhaseEst
             //std::cout << "freqs:\n" << freqs << std::endl;
 
             //std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-            /*
+            
             std::cout << "phi:\n" << phi << std::endl;
             std::cout << "Q:\n" << Q << std::endl;
             std::cout << "M:\n" << M << std::endl;
@@ -792,9 +806,9 @@ namespace StatePhaseEst
             std::cout << "iter: " << iter << std::endl;
 
             std::cout << "---------------------------" << std::endl;
-            */
+            
             std::cout << "fit!!" << std::endl;
-            std::cin.ignore();
+            //std::cin.get();
             
             // }
 
