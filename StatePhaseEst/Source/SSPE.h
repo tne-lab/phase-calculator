@@ -85,8 +85,12 @@ namespace StatePhaseEst
         {
             ampEst(0) = 0.999995434106301;
             qEst(0) = 50;
-            
-            
+
+            allX = Array<Matrix>();
+            allP = Array<Matrix>();
+            dsBuf = Array<float>();
+            prevBuf = Array<float>();
+            complexArray = Array<std::complex<double>>();
         }
         
         ~SSPE() { }
@@ -118,13 +122,13 @@ namespace StatePhaseEst
                 obsErrorEst = value;
                 break;
             case Q_EST_ONE_SSPE:
-                qEst[0] = value;
+                qEst(0) = value;
                 break;
             case Q_EST_TWO_SSPE:
-                qEst[1] = value;
+                qEst(1) = value;
                 break;
             case Q_EST_THREE_SSPE:
-                qEst[2] = value;
+                qEst(2) = value;
                 break;
             }
            
@@ -180,71 +184,81 @@ namespace StatePhaseEst
         Array<std::complex<double>> evalBuffer(const float* rpBuf, int nSamples)
         { 
 
-            //std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-            //std::cout << "nsamples: " << nSamples << std::endl;
-            //int bufStart = histSize - nSamples;
-            Array<Matrix> allX = Array<Matrix>();
-            int arraySize = (nSamples / stride)+1;
-            allX.resize(arraySize);
+            int arraySize = ((nSamples-1) / stride) + 1; // nSamples -1 in case perfectly divisible by stride so we round down. +2 to account for overflow value
+
+            // clear allP
+            allX.clearQuick();
+            if (allX.size() != arraySize+1) // Plus one because it also needs to hold prev state
+            {
+                allX.resize(arraySize+1);
+            }
             allX.set(0,prevState); // Append prevState
-            //std::cout << "all x size : " << allX.size() << std::endl;
-
-            Array<Matrix> allP = Array<Matrix>();
-            allP.resize(arraySize);
+            
+            // clear allP
+            allP.clearQuick(); 
+            if (allP.size() != arraySize+1) // Plus one because it also needs to hold prev cov
+            {
+                allP.resize(arraySize+1);
+            }
             allP.set(0,prevCov); // Append prevCov
-            
 
-            int endInd = 0;
-            //std::cout << "Nsamples/stride: " << nSamples / stride << std::endl;
-            //std::cout << "Nsamples: " << nSamples  << std::endl;
-            //std::cout << "stride: " << stride << std::endl;
+           // clear dsBuf
+           dsBuf.clearQuick();
+           if (dsBuf.size() != arraySize)
+           {
+               dsBuf.resize(arraySize);
+           }
 
-            //for (int i = 0; i <nSamples; i++)
-            //{
-            //    std::cout << i << " :rpbuf long: " << history[bufStart + i] << std::endl;
-            //}
-
-            
-
+           // Add samples to dsBuf from rpBuf and prevBuf (if needed for overflow)
+            for (int i = nSamples, n = arraySize-1; n>=0; i-=stride, n--)
+            {
+                if (i < 0)
+                {
+                    dsBuf.set(n, prevBuf[nSamples + i - 1]); // go back i samples from the end (i will be negative because we passed the 0th sample of the current buffer
+                    // and are going to the prev buffer.
+                    std::cout << "should never get here" << std::endl;
+                    std::cin.get();
+                }
+                else
+                {
+                    dsBuf.set(n, rpBuf[i - 1]);
+                }
+            }
+                        
+            // Start setting allX at index 1 because 0th carried over from previous buffer
             for (int i = 1; i <= arraySize; i++)
             {
                 Matrix newState;
                 Matrix newStateCov;
-                /*
-                if (rpBuffer[(i - 1) * stride]  == 0)
-                {
-                    endInd = i;
-                    break;
-                }*/
-                oneStepKalmanEval(newState, newStateCov, allX[i - 1], rpBuf[((i - 1)* stride)], allP[i - 1], phi, Q, sigmaObs, M);
-                //std::cout << i << std::endl;
-                //std::cout << "rpbuf: " << rpBuf[((i - 1) * stride)] << std::endl;
+                oneStepKalmanEval(newState, newStateCov, allX[i - 1], dsBuf[(i - 1)], allP[i - 1], phi, Q, sigmaObs, M);
                 allX.set(i,newState);
                 allP.set(i,newStateCov);
-                endInd += 1;
             }
-            //std::cout << "endInd: " << endInd << std::endl;
             
-            Array<std::complex<double>> complexArray = Array<std::complex<double>>();
-            complexArray.resize(arraySize-1);
-            //complexArray.removeRange(0, 1);
+            complexArray.clearQuick();
+            if (complexArray.size() != arraySize)
+            {
+                complexArray.resize(arraySize);
+            }
             prevState = allX.getLast();
             prevCov = allP.getLast();
-            //std::cout << "endInd: " << endInd << std::endl;
-            //std::cin.ignore();
-            int cmpInd = 0;
-            for (int i = 1; i <= endInd; i++, cmpInd++)
-            {
-                 complexArray.set(cmpInd,std::complex<double>(allX[i](foiIndex, 0), allX[i](foiIndex + 1, 0)));
-            }
-            //std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-            //std::cout.precision(dbl::max_digits10);
-            //std::ofstream myfile("D:\\TNEL\\oep-installation\\state-phase-est\\StatePhaseEst\\Source\\bufspeed2048.csv", std::ios::app);
-            //std::cout << nSamples << "\n";
-            //myfile << std::fixed << std::setprecision(dbl::max_digits10 + 2) << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << ",";
 
-            //std::cout << "Time difference fit model = " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << "[µs]" << std::endl;
-            //std::cin.ignore();
+            for (int i = 1; i <= arraySize; i++)
+            {
+                 complexArray.set(i-1,std::complex<double>(allX[i](foiIndex, 0), allX[i](foiIndex + 1, 0)));
+            }
+
+            // set prevBuf (maybe change to only save latest)
+            prevBuf.clearQuick();
+            if (prevBuf.size() != nSamples)
+            {
+                prevBuf.resize(nSamples);
+            }
+            for (int i = 0; i < nSamples; i++)
+            {
+                prevBuf.set(i, rpBuf[i]);
+            }
+
             return complexArray;      
         }
 
@@ -357,10 +371,10 @@ namespace StatePhaseEst
             std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
             //int stride = 40000 / fs;
             int stride = dataFs / fs;
-            //std::ofstream myfile("D:\\TNEL\\oep-installation\\state-phase-est\\StatePhaseEst\\Source\\bufdat33210.csv", std::ios::app);
-            std::ofstream myfile("C:\\Users\\Ephys\\Documents\\Github\\OE\\oecmake\\phase-calculator\\StatePhaseEst\\Source\\bufdat_justsin.csv", std::ios::app);
+            std::ofstream myfile("E:\\TNEL\\oep-installation\\state-phase-est\\StatePhaseEst\\Source\\bufdat_justsin_3101024.csv", std::ios::app);
+            //std::ofstream myfile("C:\\Users\\Ephys\\Documents\\Github\\OE\\oecmake\\phase-calculator\\StatePhaseEst\\Source\\bufdat_justsin_3101024.csv", std::ios::app);
            // std::cout << "Stride: " << stride << std::endl;
-           // std::cout << "data Size: " << data_array.size() << std::endl;
+            //std::cout << "data Size: " << data_array.size() << std::endl;
             const double* inputSeries = data_array.begin();
             vector data = vector(data_array.size() / stride);
             for (int i = 0; i < data_array.size()/stride; i++)
@@ -919,6 +933,12 @@ namespace StatePhaseEst
         Array<Matrix> allXEB;
 
         Array<Matrix> allPEB;
+
+        Array<float> dsBuf;
+        Array<float> prevBuf;
+        Array<Matrix> allX;
+        Array<Matrix> allP;
+        Array<std::complex<double>> complexArray;
         
         vector ampVec;
         vector sigmaFreqs;

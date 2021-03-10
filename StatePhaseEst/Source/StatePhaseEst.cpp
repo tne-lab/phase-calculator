@@ -720,21 +720,11 @@ namespace StatePhaseEst
                         unwrapBuffer(wpOut, nSamples, acInfo->lastPhase);
                         smoothBuffer(wpOut, nSamples, acInfo->lastPhase);
                         acInfo->lastPhase = wpOut[nSamples - 1];
-                        std::cout << "nsamp:L " << nSamples << std::endl;
-                        std::cout << "stride: " << stride << std::endl;
                     }
                     break;
                 }
                 case STATE_SPACE:
                 {
-                    if (printedSamps == false)
-                    {
-                        //std::ofstream myfile("D:\\TNEL\\oep-installation\\state-phase-est\\StatePhaseEst\\Source\\buffersamps.txt", std::ios::app);
-                        //myfile << sampsForeEval - buffer.getNumSamples() << "\n";
-                        //std::cout << "Samps before first eval buf: " << sampsForeEval << std::endl;
-                        //sampsForeEval = 0;
-                        printedSamps = true;
-                    }
                     int maxHistoryLength = 0;
                     maxHistoryLength = jmax(maxHistoryLength, chanInfo->acInfo->history.size());
                     Array<double> reverseData;
@@ -742,36 +732,19 @@ namespace StatePhaseEst
 
                     double* dataPtr = reverseData.getRawDataPointer();
                     acInfo->history.unwrapAndCopy(dataPtr, true);
-                    //const float * rpBuf = buffer.getReadPointer(1);
-                    //for (int i = 0; i < nSamples; i++)
-                    //{
-                    //    std::cout << i << " :rpbuf long: " << rpBuf[i] << std::endl;
-                    //}
+
                     Array<Dsp::complex_t> htOutput = acInfo->sspe.evalBuffer(buffer.getReadPointer(chan), nSamples);
-                    //std::cout << "ht size: " << htOutput.size() << std::endl;
-                    
-                    //float* wpOut = buffer.getWritePointer(chan);
-                    
-                    //for (int i = 0; i < htOutput.size(); i++)
-                    //{
-                    //    std::cout << float(std::arg(htOutput[i]) * 180.0 / Dsp::doublePi) <<std::endl;
-                    //}
-                    //std::cout << "htoutsize: " << htOutput.size();
-                    //std::cout << "buf size: " << nSamples << std::endl;
-                    //std::cout << "stride: " << stride << std::endl;
-                    //std::cin.get();
-                    //acInfo->lastPhase = wpOut[SSPEout.size() - 1];
                    
                     // output with upsampling (interpolation)
                     float* wpOut = buffer.getWritePointer(chan);
 
                     double nextComputedPhase, phaseStep;
                     double nextComputedMag, magStep;
-                    float lastphase = 0;
+
+                    acInfo->interpCountdown = nSamples % stride;
 
                     nextComputedPhase = std::arg(htOutput[0]);
                     phaseStep = circDist(nextComputedPhase, acInfo->lastComputedPhase, Dsp::doublePi) / stride;
-                    std::cout <<"\n\nstarting interp: " << acInfo->interpCountdown << std::endl;
                     for (int i = 0, frame = 0; i < nSamples; ++i, --acInfo->interpCountdown)
                     {
                         if (acInfo->interpCountdown == 0)
@@ -789,20 +762,7 @@ namespace StatePhaseEst
 
                         thisPhase = circDist(nextComputedPhase, phaseStep * acInfo->interpCountdown, Dsp::doublePi);
 
-
-                        //std::cout << float(thisPhase * (180.0 / Dsp::doublePi)) << std::endl;
-                        if (float(thisPhase * (180.0 / Dsp::doublePi)) < lastphase)
-                        {
-                            std::cout << "i: " << i << std::endl;
-                            std::cout << "frame: " << frame << std::endl;
-                            std::cout << " interpcountl: " << acInfo->interpCountdown << std::endl;
-                            std::cout << "lastPhase: " << float(acInfo->lastComputedPhase * (180.0 / Dsp::doublePi)) << std::endl;
-                            std::cout << " phasesetep : " << phaseStep << std::endl;
-                            std::cout << "nextComputedPhase: " << nextComputedPhase << std::endl;
-                            std::cin.get();
-                        }
                         wpOut[i] = float(thisPhase * (180.0 / Dsp::doublePi));
-                        lastphase = float(thisPhase * (180.0 / Dsp::doublePi));
 
                     }
                     //std::cin.get();
