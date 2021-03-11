@@ -80,6 +80,7 @@ namespace StatePhaseEst
         ,   ampEst(vector(1))
         ,   qEst(vector(1))
         ,   obsErrorEst(1)
+        ,   prevOverflow(0)
        // ,   myfile(std::ofstream("D:\\TNEL\\oep-installation\\state-phase-est\\StatePhaseEst\\Source\\bufdat.txt", std::ios::app))
 
         {
@@ -166,13 +167,18 @@ namespace StatePhaseEst
             return fs;
         }
 
+        const int getOverflow()
+        {
+            return prevOverflow;
+        }
+
         bool setDesFreqIndex(int foi)
         {
             int nFreqs = freqs.size();
          
             if (foi <= nFreqs)
             {
-                foiIndex = foi;
+                foiIndex = foi; // 0 indexing
                 freqsSet = true;
                 return freqsSet;
             }
@@ -183,50 +189,52 @@ namespace StatePhaseEst
 
         Array<std::complex<double>> evalBuffer(const float* rpBuf, int nSamples)
         { 
-
-            int arraySize = ((nSamples-1) / stride) + 1; // nSamples -1 in case perfectly divisible by stride so we round down. +2 to account for overflow value
+            bool overflow = ((prevOverflow + nSamples) % stride) != 0; // No prediction needed if divisible
+            bool extraSamp = prevOverflow < nSamples% stride; // Extra real data point available if low enough starting index. 
+            int arraySize = (extraSamp && overflow) ? ((nSamples) / stride) + 3 : ((nSamples) / stride) + 2; // Need prevState always (+1). If no overflow (+1). if overflow and extraSamp (+2) 
 
             // clear allP
             allX.clearQuick();
-            if (allX.size() != arraySize+1) // Plus one because it also needs to hold prev state
+            if (allX.size() != arraySize) // Plus one because it also needs to hold prev state and predicted value
             {
-                allX.resize(arraySize+1);
+                allX.resize(arraySize);
             }
             allX.set(0,prevState); // Append prevState
             
             // clear allP
             allP.clearQuick(); 
-            if (allP.size() != arraySize+1) // Plus one because it also needs to hold prev cov
+            if (allP.size() != arraySize) // Plus one because it also needs to hold prev cov and predicted value
             {
-                allP.resize(arraySize+1);
+                allP.resize(arraySize);
             }
             allP.set(0,prevCov); // Append prevCov
 
            // clear dsBuf
-           dsBuf.clearQuick();
-           if (dsBuf.size() != arraySize)
-           {
-               dsBuf.resize(arraySize);
-           }
-
-           // Add samples to dsBuf from rpBuf and prevBuf (if needed for overflow)
-            for (int i = nSamples, n = arraySize-1; n>=0; i-=stride, n--)
+            dsBuf.clearQuick();
+            if (dsBuf.size() != arraySize-2 && overflow)
             {
-                if (i < 0)
-                {
-                    dsBuf.set(n, prevBuf[nSamples + i - 1]); // go back i samples from the end (i will be negative because we passed the 0th sample of the current buffer
-                    // and are going to the prev buffer.
-                    std::cout << "should never get here" << std::endl;
-                    std::cin.get();
-                }
-                else
-                {
-                    dsBuf.set(n, rpBuf[i - 1]);
-                }
+                dsBuf.resize(arraySize-2);
             }
+            else if ((dsBuf.size() != arraySize - 1 && !overflow))
+            {
+                dsBuf.resize(arraySize - 1);
+            }
+
+            std::cout << "----" << std::endl;
+          
+            int i = prevOverflow;
+           // Add samples to dsBuf from rpBuf starting at index according to prevOverflow
+            for (int n = 0; i < nSamples; i+=stride, n++)
+            {
+                std::cout << i << std::endl;
+                    dsBuf.set(n, rpBuf[i]);
+            }
+            std::cout << i << std::endl;
+            prevOverflow = i- nSamples; // what sample is our predicted value for
+            std::cout << "prevover: " <<  prevOverflow << std::endl;
                         
             // Start setting allX at index 1 because 0th carried over from previous buffer
-            for (int i = 1; i <= arraySize; i++)
+            for (int i = 1; i < arraySize; i++)
             {
                 Matrix newState;
                 Matrix newStateCov;
@@ -234,44 +242,54 @@ namespace StatePhaseEst
                 allX.set(i,newState);
                 allP.set(i,newStateCov);
             }
+            Matrix newState;
+            Matrix newStateCov;
+            stateEstimation(newState, newStateCov, allX[arraySize - 2], allP[arraySize - 2], phi, Q);
+            allX.set(arraySize-1, newState);
+            allP.set(arraySize-1, newStateCov);
             
             complexArray.clearQuick();
-            if (complexArray.size() != arraySize)
+            if (complexArray.size() != arraySize-1)
             {
-                complexArray.resize(arraySize);
+                complexArray.resize(arraySize-1); // Don't want the prevCov
             }
-            prevState = allX.getLast();
-            prevCov = allP.getLast();
+            prevState = allX[arraySize-2];
+            prevCov = allP[arraySize-2];
 
-            for (int i = 1; i <= arraySize; i++)
+            for (int i = 1; i < arraySize; i++)
             {
                  complexArray.set(i-1,std::complex<double>(allX[i](foiIndex, 0), allX[i](foiIndex + 1, 0)));
-            }
-
-            // set prevBuf (maybe change to only save latest)
-            prevBuf.clearQuick();
-            if (prevBuf.size() != nSamples)
-            {
-                prevBuf.resize(nSamples);
-            }
-            for (int i = 0; i < nSamples; i++)
-            {
-                prevBuf.set(i, rpBuf[i]);
+                 std::cout << i - 1 << " : " << std::arg(complexArray[i - 1]) << std::endl;
             }
 
             return complexArray;      
         }
 
-        void oneStepKalmanEval(Matrix& newState, Matrix& newStateCov, Matrix state, float measuredVal, Matrix stateCov, Matrix phi, Matrix Q, float sigmaObs, Matrix M)
+        void stateEstimation(Matrix& newState, Matrix& newStateCov, Matrix state, Matrix stateCov, Matrix phi, Matrix Q)
         {
-            Matrix stateEst = phi * state;
-            Matrix pEst = phi * stateCov * phi.transpose() + Q;
+            newState = phi * state;
+            newStateCov = phi * stateCov * phi.transpose() + Q;
+        }
 
+        void stateUpdate(Matrix& newState, Matrix& newStateCov, Matrix stateEst, float measuredVal, Matrix pEst, float sigmaObs, Matrix M)
+        {
             Matrix kalmanGain = (pEst * M) / ((M.transpose() * pEst * M)(0) + sigmaObs);
 
             Matrix temp = M.transpose() * stateEst;
             newState = stateEst + kalmanGain * (measuredVal - temp(0));
             newStateCov = pEst - kalmanGain * M.transpose() * pEst;
+        }
+
+        void oneStepKalmanEval(Matrix& newState, Matrix& newStateCov, Matrix state, float measuredVal, Matrix stateCov, Matrix phi, Matrix Q, float sigmaObs, Matrix M)
+        {
+            Matrix stateEst;
+            Matrix pEst;
+
+            // Estimate state
+            stateEstimation(stateEst, pEst, state, stateCov, phi, Q);
+            
+            // Update estimation
+            stateUpdate(newState, newStateCov, stateEst, measuredVal, pEst, sigmaObs, M);
         }
 
 
@@ -939,6 +957,7 @@ namespace StatePhaseEst
         Array<Matrix> allX;
         Array<Matrix> allP;
         Array<std::complex<double>> complexArray;
+        int prevOverflow;
         
         vector ampVec;
         vector sigmaFreqs;

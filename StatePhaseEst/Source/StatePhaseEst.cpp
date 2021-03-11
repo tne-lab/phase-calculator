@@ -733,6 +733,8 @@ namespace StatePhaseEst
                     double* dataPtr = reverseData.getRawDataPointer();
                     acInfo->history.unwrapAndCopy(dataPtr, true);
 
+                    int curOverflow = acInfo->sspe.getOverflow();
+
                     Array<Dsp::complex_t> htOutput = acInfo->sspe.evalBuffer(buffer.getReadPointer(chan), nSamples);
                    
                     // output with upsampling (interpolation)
@@ -740,8 +742,13 @@ namespace StatePhaseEst
 
                     double nextComputedPhase, phaseStep;
                     double nextComputedMag, magStep;
-
-                    acInfo->interpCountdown = nSamples % stride;
+                    std::cout << "nSamps: " << nSamples << std::endl;
+                    std::cout << "stride; " << stride << std::endl;
+                    std::cout << "interp b4: " << acInfo->interpCountdown << std::endl;
+                    std::cout << "cur over: " << curOverflow << std::endl;
+                    //acInfo->interpCountdown = stride - curOverflow; // How many values to cut off from first htoutput
+                    std::cout << "interp after: " << acInfo->interpCountdown << std::endl;
+                    std::cin.get();
 
                     nextComputedPhase = std::arg(htOutput[0]);
                     phaseStep = circDist(nextComputedPhase, acInfo->lastComputedPhase, Dsp::doublePi) / stride;
