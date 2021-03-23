@@ -219,19 +219,20 @@ namespace StatePhaseEst
             {
                 dsBuf.resize(arraySize - 1);
             }
+            //std::cout << "arraySize: " << arraySize << std::endl;
 
-            std::cout << "----" << std::endl;
+            //std::cout << "----" << std::endl;
           
             int i = prevOverflow;
            // Add samples to dsBuf from rpBuf starting at index according to prevOverflow
             for (int n = 0; i < nSamples; i+=stride, n++)
             {
-                std::cout << i << std::endl;
-                    dsBuf.set(n, rpBuf[i]);
+                //std::cout << i << std::endl;
+                dsBuf.set(n, rpBuf[i]);
             }
-            std::cout << i << std::endl;
+            //std::cout << i << std::endl;
             prevOverflow = i- nSamples; // what sample is our predicted value for
-            std::cout << "prevover: " <<  prevOverflow << std::endl;
+            //std::cout << "prevover: " <<  prevOverflow << std::endl;
                         
             // Start setting allX at index 1 because 0th carried over from previous buffer
             for (int i = 1; i < arraySize; i++)
@@ -259,7 +260,7 @@ namespace StatePhaseEst
             for (int i = 1; i < arraySize; i++)
             {
                  complexArray.set(i-1,std::complex<double>(allX[i](foiIndex, 0), allX[i](foiIndex + 1, 0)));
-                 std::cout << i - 1 << " : " << std::arg(complexArray[i - 1]) << std::endl;
+                 //std::cout << i - 1 << " : " << std::arg(complexArray[i - 1]) << std::endl;
             }
 
             return complexArray;      
@@ -389,7 +390,7 @@ namespace StatePhaseEst
             std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
             //int stride = 40000 / fs;
             int stride = dataFs / fs;
-            std::ofstream myfile("E:\\TNEL\\oep-installation\\state-phase-est\\StatePhaseEst\\Source\\bufdat_justsin_3101024.csv", std::ios::app);
+            std::ofstream myfile("E:\\TNEL\\oep-installation\\phase-calculator\\StatePhaseEst\\Source\\bufdat_justsin_317_nows.csv", std::ios::app);
             //std::ofstream myfile("C:\\Users\\Ephys\\Documents\\Github\\OE\\oecmake\\phase-calculator\\StatePhaseEst\\Source\\bufdat_justsin_3101024.csv", std::ios::app);
            // std::cout << "Stride: " << stride << std::endl;
             //std::cout << "data Size: " << data_array.size() << std::endl;
@@ -410,7 +411,7 @@ namespace StatePhaseEst
             }
             
             myfile << "\n" << std::endl;
-            //myfile.close();
+            myfile.close();
             //std::cin.ignore();
             if (freqsSet == false)
             {

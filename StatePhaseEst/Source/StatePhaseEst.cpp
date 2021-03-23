@@ -742,13 +742,13 @@ namespace StatePhaseEst
 
                     double nextComputedPhase, phaseStep;
                     double nextComputedMag, magStep;
-                    std::cout << "nSamps: " << nSamples << std::endl;
-                    std::cout << "stride; " << stride << std::endl;
-                    std::cout << "interp b4: " << acInfo->interpCountdown << std::endl;
-                    std::cout << "cur over: " << curOverflow << std::endl;
+                    //std::cout << "nSamps: " << nSamples << std::endl;
+                    //std::cout << "stride; " << stride << std::endl;
+                    //std::cout << "interp b4: " << acInfo->interpCountdown << std::endl;
+                    //std::cout << "cur over: " << curOverflow << std::endl;
                     //acInfo->interpCountdown = stride - curOverflow; // How many values to cut off from first htoutput
-                    std::cout << "interp after: " << acInfo->interpCountdown << std::endl;
-                    std::cin.get();
+                    //std::cout << "interp after: " << acInfo->interpCountdown << std::endl;
+                    //std::cin.get();
 
                     nextComputedPhase = std::arg(htOutput[0]);
                     phaseStep = circDist(nextComputedPhase, acInfo->lastComputedPhase, Dsp::doublePi) / stride;
@@ -1466,23 +1466,60 @@ namespace StatePhaseEst
             // that writes to it.
             double* wpHilbert = acInfo->visHilbertBuffer.getRealPointer();
             acInfo->history.unwrapAndCopy(wpHilbert, false);
+            Array<float> phaseBuf = Array<float>();
+            phaseBuf.resize(hilbertLength);
 
             switch (acInfo->PhaseAlg)
             {
             case HILBERT_TRANSFORMER:
                 acInfo->bandReverseFilter.reset();
                 acInfo->bandReverseFilter.process(hilbertLength, &wpHilbert);
+                // un-reverse values
+                acInfo->visHilbertBuffer.reverseReal(hilbertLength);
+
+                // Hilbert transform!
+                acInfo->visHilbertBuffer.hilbert();
                 break;
             case STATE_SPACE:
                 acInfo->lowReverseFilter.reset();
                 acInfo->lowReverseFilter.process(hilbertLength, &wpHilbert);
+                
+                const float tempBuf = *wpHilbert;
+                Array<Dsp::complex_t> sspeOutput = acInfo->sspe.evalBuffer(&tempBuf, hilbertLength);
+                
+
+                // output with upsampling (interpolation)
+                double nextComputedPhase, phaseStep;
+                double nextComputedMag, magStep;
+
+                nextComputedPhase = std::arg(sspeOutput[0]);
+                int stride = acInfo->chanInfo.dsFactor;
+                int interpCountdown = 0;
+                double lastComputedPhase = 0;
+                phaseStep = circDist(nextComputedPhase, 0, Dsp::doublePi) / stride;
+                for (int i = 0, frame = 0; i < hilbertLength; ++i, --interpCountdown)
+                {
+                    if (acInfo->interpCountdown == 0)
+                    {
+                        // update interpolation frame
+                        ++frame;
+                        interpCountdown = stride;
+
+                        lastComputedPhase = nextComputedPhase;
+                        nextComputedPhase = std::arg(sspeOutput[frame]);
+                        phaseStep = circDist(nextComputedPhase, lastComputedPhase, Dsp::doublePi) / stride;
+                    }
+
+                    double thisPhase;
+
+                    thisPhase = circDist(nextComputedPhase, phaseStep * interpCountdown, Dsp::doublePi);
+
+                    phaseBuf.set(i, float(thisPhase * (180.0 / Dsp::doublePi)));
+
+                }
                 break;
             }
-            // un-reverse values
-            acInfo->visHilbertBuffer.reverseReal(hilbertLength);
 
-            // Hilbert transform!
-            acInfo->visHilbertBuffer.hilbert();
 
             juce::int64 ts;
             ScopedLock phaseBufferLock(visPhaseBufferCS);
@@ -1490,10 +1527,17 @@ namespace StatePhaseEst
             {
                 visTsBuffer.pop();
                 int delay = static_cast<int>(sdbEndTs - ts);
-                std::complex<double> analyticPt = acInfo->visHilbertBuffer.getAsComplex(hilbertLength - delay);
-                double phaseRad = std::arg(analyticPt);
+                double phaseRad;
+                switch (acInfo->PhaseAlg)
+                {
+                case HILBERT_TRANSFORMER:
+                    std::complex<double> analyticPt = acInfo->visHilbertBuffer.getAsComplex(hilbertLength - delay);
+                    phaseRad = std::arg(analyticPt);
+                    break;
+                case STATE_SPACE:
+                    phaseRad = phaseBuf[hilbertLength - delay];
+                }
                 visPhaseBuffer.push(phaseRad);
-
                 // add to event channel
                 if (!visPhaseChannel)
                 {
