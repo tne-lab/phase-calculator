@@ -4,7 +4,7 @@ A plugin for the [Open Ephys GUI](https://github.com/open-ephys/plugin-GUI) to e
 
 See the following github page and article that describes current implementation and assitance with setting up closed loop experiments. [Github repo](https://github.com/tne-lab/TORTE) and Article(in progress).
 
-<img src="resources/select_menu.png" width="200" />
+<img src="resources/select_menu.PNG" width="200" />
 
 The `development` branch of the Analytic Signal plugin provides two different algorithms to choose from. The The Hilbert Transformer algorithm is described in the above article. The State Space algorithm is still in a beta state and most likely still has some bugs present. See the State Space algorithm described in this [article](https://www.biorxiv.org/content/10.1101/2021.03.25.437024v1):
 
@@ -13,7 +13,7 @@ The `development` branch of the Analytic Signal plugin provides two different al
 Anirudh Wodeyar, Mark Schatza, Alik S. Widge, Uri T. Eden, Mark A. Kramer.
 bioRxiv 2021.03.25.437024; doi: https://doi.org/10.1101/2021.03.25.437024
 
-<img src="resources/sspe.png" width="200" />
+<img src="resources/sspe.PNG" width="200" />
 
 The following article describes the algorithm used by the **previous version** of this plugin and the closed-loop stimulation pipeline as a whole:
 
