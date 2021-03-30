@@ -21,8 +21,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 
-#include "StatePhaseEstCanvas.h"
-#include "StatePhaseEstEditor.h"
+#include "AnalyticSignalCanvas.h"
+#include "AnalyticSignalEditor.h"
 
 namespace StatePhaseEst
 {

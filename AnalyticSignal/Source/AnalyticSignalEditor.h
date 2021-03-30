@@ -27,7 +27,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <sstream>  // string parsing
 #include <VisualizerEditorHeaders.h>
 
-#include "StatePhaseEst.h"
+#include "AnalyticSignal.h"
 
 namespace StatePhaseEst
 {

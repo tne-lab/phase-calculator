@@ -25,8 +25,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <cmath>   // sqrt
 #include <cstring> // memcpy, memmove
 
-#include "StatePhaseEst.h"
-#include "StatePhaseEstEditor.h"
+#include "AnalyticSignal.h"
+#include "AnalyticSignalEditor.h"
 
 #include <iostream>
 #include <fstream>

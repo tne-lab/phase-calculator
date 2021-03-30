@@ -22,7 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <PluginInfo.h>
-#include "StatePhaseEst.h"
+#include "AnalyticSignalt.h"
 #include <string>
 #ifdef WIN32
 #include <Windows.h>

@@ -20,8 +20,8 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "StatePhaseEstEditor.h"
-#include "StatePhaseEstCanvas.h"
+#include "AnalyticSignalEditor.h"
+#include "AnalyticSignalCanvas.h"
 #include "HTransformers.h"
 #include <climits> // INT_MAX
 #include <cfloat>  // FLT_MAX

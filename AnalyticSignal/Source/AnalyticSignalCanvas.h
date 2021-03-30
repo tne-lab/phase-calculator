@@ -24,7 +24,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef STATE_PHASE_EST_CANVAS_H_INCLUDED
 #define STATE_PHASE_EST_CANVAS_H_INCLUDED
 
-#include "StatePhaseEst.h"
+#include "AnalyticSignal.h"
 #include <VisualizerWindowHeaders.h>
 #include <set> // std::multiset
 #include <functional>
