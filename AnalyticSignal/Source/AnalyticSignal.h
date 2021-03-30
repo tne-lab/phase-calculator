@@ -26,7 +26,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 /*
 
-The Phase Calculator filters selected input channels to the given passband,
+The Analytic Signal hilbert transformer filters selected input channels to the given passband,
 generates an estimate of the phase of each band-limited signal in degrees
 using the Hilbert transform, and outputs this as a continuous stream.
 There are also options to output the magnitude or imaginary component of the analytic signal.

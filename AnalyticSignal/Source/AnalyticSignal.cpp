@@ -332,9 +332,9 @@ namespace StatePhaseEst
         return acInfo != nullptr;
     }
 
-    /**** phase calculator node ****/
+    /**** analytic signal node ****/
     Node::Node()
-        : GenericProcessor("Phase Calculator")
+        : GenericProcessor("Analytic Signal")
         , Thread("AR Modeler")
         , calcInterval(50)
         , arOrder(20)
@@ -1528,10 +1528,11 @@ namespace StatePhaseEst
                 visTsBuffer.pop();
                 int delay = static_cast<int>(sdbEndTs - ts);
                 double phaseRad;
+                std::complex<double> analyticPt;
                 switch (acInfo->PhaseAlg)
                 {
                 case HILBERT_TRANSFORMER:
-                    std::complex<double> analyticPt = acInfo->visHilbertBuffer.getAsComplex(hilbertLength - delay);
+                    analyticPt = acInfo->visHilbertBuffer.getAsComplex(hilbertLength - delay);
                     phaseRad = std::arg(analyticPt);
                     break;
                 case STATE_SPACE:
