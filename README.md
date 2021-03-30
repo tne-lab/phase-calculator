@@ -46,6 +46,7 @@ See `PhaseCalculator/CMAKE_README.txt` and/or the wiki page [here](https://open-
 
 ### Main functionality
 
+### Hilbert transformer
 * ***Important!*** Since the phase estimation algorithm is somewhat processor-intensive, by default all input channels are disabled. To enable the channels you would like to estimate the phase (or other component) of, select them in the "PARAM" section of the drawer. If "PH+MAG" is selcected as the output, this will also create the additional magnitude outputs for each selected input.
 
 * In the "freq range" dropdown menu, choose a range of frequencies that includes the band you want to filter to. This determines which of the pre-designed Hilbert transformer filters is used internally (since if we tried to use one filter for all frequencies, it would end up with terrible performance everywhere). Note that the delta band is just too low to get a reasonably accurate phase estimate, even when downsampling to 500 Hz as this plugin does (before interpolating the output).
@@ -55,6 +56,15 @@ See `PhaseCalculator/CMAKE_README.txt` and/or the wiki page [here](https://open-
 * "AR Refresh" and "Order" control the autoregressive model used to predict the "future" portion of the Hilbert buffer. AR parameters are estimated using Burg's method. The default settings seem to work well, but other settings (particularly lower orders) may also work well.
 
 * "Output" allows selection of which component(s) of the analytic signal to output (for all enabled channels). If PH+MAG is selected, a magnitude (amplitude envelope) output channel is added to the outputs for each selected input channel; they appear in the ascending numerical order of their corresponding input/phase output channels. See `/resources/PC_ph+mag_demo.png` for an example of outputtng both phase and magnitude.
+
+### SSPE
+* ***Important!*** Since the phase estimation algorithm is somewhat processor-intensive, by default all input channels are disabled. To enable the channels you would like to estimate the phase (or other component) of, select them in the "PARAM" section of the drawer.
+
+* In the "num freqs" dropdown menu, choose how many oscialltions are present in the data. A freq editable will appear for each freq to determine the frequenices to model. Click the check box of which frequencies phase to output. 
+
+* Q for each frequency should be determined by obtaining the spectrogram of the signal. To determine Q take the square root of the amplitude for each frequency. Default for LFP data is 50.
+
+* "obs err" is used to determine the error in the observation. Increase if higher than normal SNR.
 
 ### Event phase visualization
 
