@@ -537,6 +537,10 @@ namespace PhaseCalculator
                     unwrapBuffer(wpOut, nSamples, acInfo->lastPhase);
                     smoothBuffer(wpOut, nSamples, acInfo->lastPhase);
                     acInfo->lastPhase = wpOut[nSamples - 1];
+                    for (int i = 0; i < nSamples; i++)
+                    {
+                        wpOut[i] /= 100;
+                    }
                 }
             }
             else // fifo not full or AR model not ready

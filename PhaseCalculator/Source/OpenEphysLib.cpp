@@ -37,7 +37,7 @@ using namespace Plugin;
 extern "C" EXPORT void getLibInfo(Plugin::LibraryInfo* info)
 {
     info->apiVersion = PLUGIN_API_VER;
-    info->name = "Phase Calculator";
+    info->name = "Phase Calc ADC";
     info->libVersion = 1;
     info->numPlugins = NUM_PLUGINS;
 }
@@ -48,7 +48,7 @@ extern "C" EXPORT int getPluginInfo(int index, Plugin::PluginInfo* info)
     {
     case 0:
         info->type = Plugin::PLUGIN_TYPE_PROCESSOR;
-        info->processor.name = "Phase Calculator";
+        info->processor.name = "Phase Calc ADC";
         info->processor.type = Plugin::FilterProcessor;
         info->processor.creator = &(Plugin::createProcessor<PhaseCalculator::Node>);
         break;
