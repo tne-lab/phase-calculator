@@ -62,8 +62,6 @@ namespace PhaseCalculator
         void loadCustomParameters(XmlElement* xml) override;
 
         // display updaters - do not trigger listeners.
-        void refreshLowCut();
-        void refreshHighCut();
         void refreshVisContinuousChan();
 
     private:
@@ -141,30 +139,15 @@ namespace PhaseCalculator
         ScopedPointer<Label>    bandLabel;
         ScopedPointer<ComboBox> bandBox;
 
-        ScopedPointer<Label>    lowCutLabel;
-        ScopedPointer<Label>    lowCutEditable;
-        ScopedPointer<Label>    lowCutUnit;
-
-        ScopedPointer<Label>    highCutLabel;
-        ScopedPointer<Label>    highCutEditable;
-        ScopedPointer<Label>    highCutUnit;
-
-        ScopedPointer<Label>    recalcIntervalLabel;
-        ScopedPointer<Label>    recalcIntervalEditable;
-        ScopedPointer<Label>    recalcIntervalUnit;
-
-        ScopedPointer<Label>    arOrderLabel;
-        ScopedPointer<Label>    arOrderEditable;
 
         ScopedPointer<Label>    outputModeLabel;
         ScopedPointer<ComboBox> outputModeBox;
 
+		// added by Sumedh
         // constants
         const String freqRangeTooltip = "Each option corresponds internally to a Hilbert transformer " +
             String("that is optimized for this frequency range. After selecting a range, you can adjust ") +
             "'low' and 'high' to filter to any passband within this range.";
-        const String recalcIntervalTooltip = "Time to wait between calls to update the autoregressive models";
-        const String arOrderTooltip = "Order of the autoregressive models used to predict future data";
         const String outputModeTooltip = "Which component of the analytic signal to output. If 'PH+MAG' is selected, " +
             String("creates a second channel for each enabled input channel and outputs phases ") +
             "on the original channels and magnitudes on the corresponding new channels.";

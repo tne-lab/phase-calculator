@@ -28,14 +28,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <cmath>   // abs
 
 namespace PhaseCalculator
-{
+{ //added by sumedh
     Editor::Editor(Node* parentNode, bool useDefaultParameterEditors)
-        : VisualizerEditor(parentNode, 220, useDefaultParameterEditors)
+        : VisualizerEditor(parentNode, 250, useDefaultParameterEditors)
         , extraChanManager(parentNode)
         , prevExtraChans(0)
     {
         tabText = "Event Phase Plot";
-        int filterWidth = 120;
+        int filterWidth = 5;
 
         // make the canvas now, so that restoring its parameters always works.
         canvas = new Canvas(parentNode);
@@ -57,88 +57,8 @@ namespace PhaseCalculator
         bandBox->addListener(this);
         addAndMakeVisible(bandBox);
 
-        lowCutLabel = new Label("lowCutL", "Low:");
-        lowCutLabel->setBounds(5, 70, 50, 20);
-        lowCutLabel->setFont({ "Small Text", 12, Font::plain });
-        lowCutLabel->setColour(Label::textColourId, Colours::darkgrey);
-        addAndMakeVisible(lowCutLabel);
-
-        lowCutEditable = new Label("lowCutE");
-        lowCutEditable->setEditable(true);
-        lowCutEditable->addListener(this);
-        lowCutEditable->setBounds(50, 70, 35, 18);
-        lowCutEditable->setText(String(parentNode->lowCut), dontSendNotification);
-        lowCutEditable->setColour(Label::backgroundColourId, Colours::grey);
-        lowCutEditable->setColour(Label::textColourId, Colours::white);
-        addAndMakeVisible(lowCutEditable);
-
-        lowCutUnit = new Label("lowCutU", "Hz");
-        lowCutUnit->setBounds(85, 70, 25, 18);
-        lowCutUnit->setFont({ "Small Text", 12, Font::plain });
-        lowCutUnit->setColour(Label::textColourId, Colours::darkgrey);
-        addAndMakeVisible(lowCutUnit);
-
-        highCutLabel = new Label("highCutL", "High:");
-        highCutLabel->setBounds(5, 100, 50, 20);
-        highCutLabel->setFont({ "Small Text", 12, Font::plain });
-        highCutLabel->setColour(Label::textColourId, Colours::darkgrey);
-        addAndMakeVisible(highCutLabel);
-
-        highCutEditable = new Label("highCutE");
-        highCutEditable->setEditable(true);
-        highCutEditable->addListener(this);
-        highCutEditable->setBounds(50, 100, 35, 18);
-        highCutEditable->setText(String(parentNode->highCut), dontSendNotification);
-        highCutEditable->setColour(Label::backgroundColourId, Colours::grey);
-        highCutEditable->setColour(Label::textColourId, Colours::white);
-        addAndMakeVisible(highCutEditable);
-
-        highCutUnit = new Label("highCutU", "Hz");
-        highCutUnit->setBounds(85, 100, 25, 18);
-        highCutUnit->setFont({ "Small Text", 12, Font::plain });
-        highCutUnit->setColour(Label::textColourId, Colours::darkgrey);
-        addAndMakeVisible(highCutUnit);
-
-        recalcIntervalLabel = new Label("recalcL", "AR Refresh:");
-        recalcIntervalLabel->setBounds(filterWidth, 25, 100, 20);
-        recalcIntervalLabel->setFont({ "Small Text", 12, Font::plain });
-        recalcIntervalLabel->setColour(Label::textColourId, Colours::darkgrey);
-        addAndMakeVisible(recalcIntervalLabel);
-
-        recalcIntervalEditable = new Label("recalcE");
-        recalcIntervalEditable->setEditable(true);
-        recalcIntervalEditable->addListener(this);
-        recalcIntervalEditable->setBounds(filterWidth + 5, 44, 55, 18);
-        recalcIntervalEditable->setColour(Label::backgroundColourId, Colours::grey);
-        recalcIntervalEditable->setColour(Label::textColourId, Colours::white);
-        recalcIntervalEditable->setText(String(parentNode->calcInterval), dontSendNotification);
-        recalcIntervalEditable->setTooltip(recalcIntervalTooltip);
-        addAndMakeVisible(recalcIntervalEditable);
-
-        recalcIntervalUnit = new Label("recalcU", "ms");
-        recalcIntervalUnit->setBounds(filterWidth + 60, 47, 25, 15);
-        recalcIntervalUnit->setFont({ "Small Text", 12, Font::plain });
-        recalcIntervalUnit->setColour(Label::textColourId, Colours::darkgrey);
-        addAndMakeVisible(recalcIntervalUnit);
-
-        arOrderLabel = new Label("arOrderL", "Order:");
-        arOrderLabel->setBounds(filterWidth, 65, 60, 20);
-        arOrderLabel->setFont({ "Small Text", 12, Font::plain });
-        arOrderLabel->setColour(Label::textColourId, Colours::darkgrey);
-        addAndMakeVisible(arOrderLabel);
-
-        arOrderEditable = new Label("arOrderE");
-        arOrderEditable->setEditable(true);
-        arOrderEditable->addListener(this);
-        arOrderEditable->setBounds(filterWidth + 55, 66, 25, 18);
-        arOrderEditable->setColour(Label::backgroundColourId, Colours::grey);
-        arOrderEditable->setColour(Label::textColourId, Colours::white);
-        arOrderEditable->setText(String(parentNode->arOrder), sendNotificationAsync);
-        arOrderEditable->setTooltip(arOrderTooltip);
-        addAndMakeVisible(arOrderEditable);
-
         outputModeLabel = new Label("outputModeL", "Output:");
-        outputModeLabel->setBounds(filterWidth, 87, 70, 20);
+        outputModeLabel->setBounds(filterWidth, 72, 70, 20);
         outputModeLabel->setFont({ "Small Text", 12, Font::plain });
         outputModeLabel->setColour(Label::textColourId, Colours::darkgrey);
         addAndMakeVisible(outputModeLabel);
@@ -150,7 +70,7 @@ namespace PhaseCalculator
         outputModeBox->addItem("IMAG", IM);
         outputModeBox->setSelectedId(parentNode->outputMode);
         outputModeBox->setTooltip(outputModeTooltip);
-        outputModeBox->setBounds(filterWidth + 5, 105, 76, 19);
+        outputModeBox->setBounds(filterWidth + 5, 92, 76, 19);
         outputModeBox->addListener(this);
         addAndMakeVisible(outputModeBox);
 
@@ -177,47 +97,6 @@ namespace PhaseCalculator
     void Editor::labelTextChanged(Label* labelThatHasChanged)
     {
         Node* processor = static_cast<Node*>(getProcessor());
-
-        if (labelThatHasChanged == recalcIntervalEditable)
-        {
-            int intInput;
-            bool valid = updateControl(labelThatHasChanged, 0, INT_MAX, processor->calcInterval, intInput);
-
-            if (valid)
-            {
-                processor->setParameter(RECALC_INTERVAL, static_cast<float>(intInput));
-            }
-        }
-        else if (labelThatHasChanged == arOrderEditable)
-        {
-            int intInput;
-            bool valid = updateControl(labelThatHasChanged, 1, INT_MAX, processor->arOrder, intInput);
-
-            if (valid)
-            {
-                processor->setParameter(AR_ORDER, static_cast<float>(intInput));
-            }
-        }
-        else if (labelThatHasChanged == lowCutEditable)
-        {
-            float floatInput;
-            bool valid = updateControl(labelThatHasChanged, 0.0f, FLT_MAX, processor->lowCut, floatInput);
-
-            if (valid)
-            {
-                processor->setParameter(LOWCUT, floatInput);
-            }
-        }
-        else if (labelThatHasChanged == highCutEditable)
-        {
-            float floatInput;
-            bool valid = updateControl(labelThatHasChanged, 0.0f, FLT_MAX, processor->highCut, floatInput);
-
-            if (valid)
-            {
-                processor->setParameter(HIGHCUT, floatInput);
-            }
-        }
     }
 
     void Editor::channelChanged(int chan, bool newState)
@@ -265,10 +144,7 @@ namespace PhaseCalculator
 
     void Editor::startAcquisition()
     {
-        bandBox->setEnabled(false);
-        lowCutEditable->setEnabled(false);
-        highCutEditable->setEnabled(false);
-        arOrderEditable->setEnabled(false);
+        bandBox->setEnabled(true);
         outputModeBox->setEnabled(false);
         channelSelector->inactivateButtons();
     }
@@ -276,9 +152,6 @@ namespace PhaseCalculator
     void Editor::stopAcquisition()
     {
         bandBox->setEnabled(true);
-        lowCutEditable->setEnabled(true);
-        highCutEditable->setEnabled(true);
-        arOrderEditable->setEnabled(true);
         outputModeBox->setEnabled(true);
         channelSelector->activateButtons();
     }
@@ -350,8 +223,6 @@ namespace PhaseCalculator
         Node* processor = (Node*)(getProcessor());
 
         XmlElement* paramValues = xml->createNewChildElement("VALUES");
-        paramValues->setAttribute("calcInterval", processor->calcInterval);
-        paramValues->setAttribute("arOrder", processor->arOrder);
         paramValues->setAttribute("lowCut", processor->lowCut);
         paramValues->setAttribute("highCut", processor->highCut);
         paramValues->setAttribute("outputMode", processor->outputMode);
@@ -368,26 +239,11 @@ namespace PhaseCalculator
         forEachXmlChildElementWithTagName(*xml, xmlNode, "VALUES")
         {
             // some parameters have two fallbacks for backwards compatability
-            recalcIntervalEditable->setText(xmlNode->getStringAttribute("calcInterval", recalcIntervalEditable->getText()), sendNotificationSync);
-            arOrderEditable->setText(xmlNode->getStringAttribute("arOrder", arOrderEditable->getText()), sendNotificationSync);
             bandBox->setSelectedId(selectBandFromSavedParams(xmlNode) + 1, sendNotificationSync);
-            lowCutEditable->setText(xmlNode->getStringAttribute("lowCut", lowCutEditable->getText()), sendNotificationSync);
-            highCutEditable->setText(xmlNode->getStringAttribute("highCut", highCutEditable->getText()), sendNotificationSync);
             outputModeBox->setSelectedId(xmlNode->getIntAttribute("outputMode", outputModeBox->getSelectedId()), sendNotificationSync);
         }
     }
 
-    void Editor::refreshLowCut()
-    {
-        auto p = static_cast<Node*>(getProcessor());
-        lowCutEditable->setText(String(p->lowCut), dontSendNotification);
-    }
-
-    void Editor::refreshHighCut()
-    {
-        auto p = static_cast<Node*>(getProcessor());
-        highCutEditable->setText(String(p->highCut), dontSendNotification);
-    }
 
     void Editor::refreshVisContinuousChan()
     {

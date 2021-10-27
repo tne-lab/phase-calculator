@@ -62,11 +62,13 @@ namespace PhaseCalculator
     enum Param
     {
         RECALC_INTERVAL,
-        AR_ORDER,
         BAND,
         LOWCUT,
         HIGHCUT,
         OUTPUT_MODE,
+		// Added by Sumedh
+		LPF_ORDER,
+		BPF_ORDER,
         VIS_E_CHAN,
         VIS_C_CHAN
     };
@@ -108,10 +110,18 @@ namespace PhaseCalculator
 
         // reset to perform after end of acquisition or update
         void reset();
+		// Added by Sumedh to create low pass filter
+		// filter design copied from FilterNode
+		using LowPassFilter = Dsp::SimpleFilter
+			<Dsp::ChebyshevI::LowPass // filter type
+			<8>,                        // order
+			1,                          // number of channels
+			Dsp::DirectFormI>;         // realization
+		LowPassFilter filterlpf;
 
         // filter design copied from FilterNode
         using BandpassFilter = Dsp::SimpleFilter
-            <Dsp::Butterworth::BandPass // filter type
+            <Dsp::Bessel::BandPass // filter type
             <2>,                        // order
             1,                          // number of channels
             Dsp::DirectFormII>;         // realization
@@ -120,9 +130,11 @@ namespace PhaseCalculator
 
         BandpassFilter filter;
 
-        ARModeler arModeler;
 
         Array<double> htState;
+		Array<double> bpfState;
+		Array<double> lpfState;
+		Array<double> lpfStateMain;
 
         // number of samples until a new non-interpolated output. e.g. if this
         // equals 1 after a buffer is processed, then there is one interpolated
@@ -220,11 +232,13 @@ namespace PhaseCalculator
         int getFullSourceId(int chan);
 
         // getters
-        int getAROrder() const;
         float getHighCut() const;
         float getLowCut() const;
         Band getBand() const;
-
+		
+		// Added by Sumedh to access the private variables
+		int getLpfOrder() const;
+		int getBpfOrder() const;
         // reads from the visPhaseBuffer if it can acquire a TryLock. returns true if successful.
         bool tryToReadVisPhases(std::queue<double>& other);
 
@@ -253,11 +267,6 @@ namespace PhaseCalculator
         // Resets lowCut and highCut to defaults for the current band
         void resetCutsToDefaults();
 
-        // Sets lowCut (which in turn influences highCut)
-        void setLowCut(float newLowCut);
-
-        // Sets highCut (which in turn influences lowCut)
-        void setHighCut(float newHighCut);
 
         // Sets visContinuousChannel and updates the visualization filter
         void setVisContChan(int newChan);
@@ -315,22 +324,6 @@ namespace PhaseCalculator
 
         void deactivateInputChannel(int chan);
 
-        // ---- static utility methods ----
-
-        /*
-        * arPredict: use autoregressive model of order to predict future data.
-        *
-        * lastSample points to the most recent sample of past data that will be used to
-        * compute phase, and there must be at least stride * (order - 1) samples
-        * preceding it in order to do the AR prediction.
-        *
-        * Input params is an array of coefficients of an AR model of length 'order'.
-        *
-        * Writes samps future data values to prediction.
-        */
-        static void arPredict(const ReverseStack& history, int interpCountdown, double* prediction,
-            const double* params, int samps, int stride, int order);
-
         // Get the htScaleFactor for the given band's Hilbert transformer,
         // over the range from lowCut and highCut. This is the reciprocal of the geometric
         // mean (i.e. mean in decibels) of the maximum and minimum magnitude responses over the range.
@@ -338,14 +331,17 @@ namespace PhaseCalculator
 
         // Execute the hilbert transformer on one sample and update the state.
         static double htFilterSamp(double input, Band band, Array<double>& state);
+		//Added by Sumedh
+		static double bpfFilterSamp(double input, Band band, Array<double>& state);
+		static double lpfFilterSamp(double input, Band band, Array<double>& state);
+		static double lpfFilter(double input, Band band, Array<double>& state);
+		// ---- customizable parameters ------
+		// Added by Sumedh
+		// Use LAA to return phase angle in degrees
+		double LAA(std::complex<double>);
+		int lpforder;
+		int bpforder;
 
-        // ---- customizable parameters ------
-
-        // time to wait between AR model recalculations in ms
-        int calcInterval;
-
-        // order of the AR model
-        int arOrder;
 
         OutputMode outputMode;
 

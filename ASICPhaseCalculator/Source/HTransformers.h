@@ -46,11 +46,14 @@ namespace PhaseCalculator
 {
     enum Band
     {
-        ALPHA_THETA = 0,
+		DELTA = 0,
+        THETA,
+		ALPHA,
         BETA,
         LOW_GAM,
         MID_GAM,
         HIGH_GAM,
+		RIPPLE,
         NUM_BANDS
     };
 
@@ -76,6 +79,52 @@ namespace PhaseCalculator
         // contain the first delay[band] coefficients; the rest are redundant and can be inferred
         extern const Array<double>* const transformer;
     }
+
+	namespace bandpassfilt
+	{
+		const int fs = 500;
+
+		// Each pointer below points to an array of length NUM_BANDS.
+
+		extern const String* const bandName;
+
+		// each is a pair (lower limit, upper limit)
+		extern const Array<float>* const validBand;
+
+		// each is a pair (low cut, high cut)
+		extern const Array<float>* const defaultBand;
+
+		extern const Array<float>* const extrema;
+
+		// samples of group delay (= order of filter / 2)
+		extern const int* const delay;
+
+		// contain the first delay[band] coefficients; the rest are redundant and can be inferred
+		extern const Array<double>* const transformer;
+	}
+
+	namespace lowpassfilt
+	{
+		const int fs = 500;
+
+		// Each pointer below points to an array of length NUM_BANDS.
+
+		extern const String* const bandName;
+
+		// each is a pair (lower limit, upper limit)
+		extern const Array<float>* const validBand;
+
+		// each is a pair (low cut, high cut)
+		extern const Array<float>* const defaultBand;
+
+		extern const Array<float>* const extrema;
+
+		// samples of group delay (= order of filter / 2)
+		extern const int* const delay;
+
+		// contain the first delay[band] coefficients; the rest are redundant and can be inferred
+		extern const Array<double>* const transformer;
+	}
 }
 
 #endif // H_TRANSFORMERS_H_INCLUDED
