@@ -37,6 +37,9 @@ namespace PhaseCalculator
     // (meant to be larger than actual minimum floating-point eps)
     static const float passbandEps = 0.01F;
 
+    // priority of the AR model calculating thread (0 = lowest, 10 = highest)
+    static const int arPriority = 3;
+
     // "glitch limit" (how long of a segment is allowed to be unwrapped or smoothed, in samples)
     static const int glitchLimit = 200;
 
@@ -45,6 +48,7 @@ namespace PhaseCalculator
     static const int visHilbertLengthMs = 1024;
     static const int visMinDelayMs = 675;
     static const int visMaxDelayMs = 1000;
+
 
     /*** ReverseStack ***/
     ReverseStack::ReverseStack(int size)
@@ -134,34 +138,36 @@ namespace PhaseCalculator
     void ActiveChannelInfo::update()
     {
         const Node& p = chanInfo.owner;
-        
+        int arOrder = p.getAROrder();
         float highCut = p.getHighCut();
         float lowCut = p.getLowCut();
         Band band = p.getBand();
-		int bpforder = p.getBpfOrder();
-        // set filter parameters
-		// set filter parameters
-		for (auto filt : { &filter, &reverseFilter })
-		{
-			filt->setup(
-				bpforder,                      // order
-				chanInfo.sampleRate,    // sample rate
-				(highCut + lowCut) / 2, // center frequency
-				highCut - lowCut);      // bandwidth
-		}
-		// added by sumedh 
-		int lpforder = p.getLpfOrder();
-		
 
-		// low pass at 250 Hz
-		for (auto lpffilt1 : { &filterlpf })
-		{
-			lpffilt1->setup(lpforder, (double)chanInfo.sampleRate, (double)(.8*(chanInfo.sampleRate/2)/ (chanInfo.sampleRate / 4000)),0.05);
-		}
+        // update length of history based on sample rate
+        // the history buffer should have enough samples to calculate phases for the viusalizer
+        // with the proper Hilbert transform length AND train an AR model of the requested order,
+        // using at least 1 second of data
+        int newHistorySize = chanInfo.dsFactor * jmax(
+            visHilbertLengthMs * Hilbert::fs / 1000,
+            arOrder + 1,
+            1 * Hilbert::fs);
+
+        history.resetAndResize(newHistorySize);
+
+        // set filter parameters
+        for (auto filt : { &filter, &reverseFilter })
+        {
+            filt->setup(
+                2,                      // order
+                chanInfo.sampleRate,    // sample rate
+                (highCut + lowCut) / 2, // center frequency
+                highCut - lowCut);      // bandwidth
+        }
+
+        arModeler.setParams(arOrder, newHistorySize, chanInfo.dsFactor);
 
         htState.resize(Hilbert::delay[band] * 2 + 1);
-		bpfState.resize(bandpassfilt::delay[band]);
-		lpfState.resize(lowpassfilt::delay[band]);
+
         // visualization stuff
         hilbertLengthMultiplier = Hilbert::fs * chanInfo.dsFactor / 1000;
         visHilbertBuffer.resize(visHilbertLengthMs * hilbertLengthMultiplier);
@@ -173,11 +179,8 @@ namespace PhaseCalculator
     {
         history.reset();
         filter.reset();
-		//added by sumedh
-		filterlpf.reset();
+        arModeler.reset();
         FloatVectorOperations::clear(htState.begin(), htState.size());
-		FloatVectorOperations::clear(bpfState.begin(), bpfState.size());
-		FloatVectorOperations::clear(lpfState.begin(), lpfState.size());
         interpCountdown = 0;
         lastComputedPhase = 0;
         lastComputedMag = 0;
@@ -247,17 +250,16 @@ namespace PhaseCalculator
 
     /**** phase calculator node ****/
     Node::Node()
-        : GenericProcessor("ASIC Phase Calculator")
+        : GenericProcessor("Phase Calculator")
         , Thread("AR Modeler")
-		// added by sumedh
-		, lpforder(8)
-		, bpforder(2)
+        , calcInterval(50)
+        , arOrder(20)
         , outputMode(PH)
         , visEventChannel(-1)
         , visContinuousChannel(-1)
     {
         setProcessorType(PROCESSOR_TYPE_FILTER);
-        setBand(THETA, true);
+        setBand(ALPHA_THETA, true);
     }
 
     Node::~Node() {}
@@ -309,10 +311,27 @@ namespace PhaseCalculator
     void Node::setParameter(int parameterIndex, float newValue)
     {
         switch (parameterIndex) {
+        case RECALC_INTERVAL:
+            calcInterval = int(newValue);
+            break;
+
+        case AR_ORDER:
+            arOrder = int(newValue);
+            updateActiveChannels();
+            break;
 
         case BAND:
             setBand(Band(int(newValue)));
             break;
+
+        case LOWCUT:
+            setLowCut(newValue);
+            break;
+
+        case HIGHCUT:
+            setHighCut(newValue);
+            break;
+
         case OUTPUT_MODE:
         {
             OutputMode oldMode = outputMode;
@@ -369,147 +388,168 @@ namespace PhaseCalculator
             {
                 continue;
             }
-			int downsampleA = 4000;
-			int downsampleB = 1000;
-			/*Get a pointer to the data wpInput*/
-			float* const wpInput = buffer.getWritePointer(chan);
-			/*active channel info -> acInfo*/
-			/*Step I: IIR Low pass filter over entire data */
-			acInfo->filterlpf.process(nSamples, &wpInput);
-			std::vector<double> dslpf;
-			int preDSample = int(floor(float(acInfo->chanInfo.sampleRate) / downsampleA));
-			for (int i = 0; i < nSamples; i = i + preDSample) {
-				dslpf.push_back(wpInput[i]);
-			}
-			/*Step II: FIR low pass filter from MATLAB*/
-			/*lpf again with the coeff from MATLAB*/
-			std::vector<double> lpfData;
-			for (int lpfIndex = 0; lpfIndex < dslpf.size(); ++lpfIndex) {
-				lpfData.push_back(lpfFilterSamp(dslpf[lpfIndex], band, acInfo->lpfState));
-			}
-			/*Step III: Downsampling from 40000K to 1K*/
-			
-			int new_sr_size = downsampleA / downsampleB;// int(floor(float(acInfo->chanInfo.sampleRate) / float(new_sampling_rate)));
-			std::vector<double> dsLpfData;
-			for (int i = 0; i < dslpf.size(); i=i+new_sr_size) {
-				dsLpfData.push_back(lpfData[i]);
-			}
-			/*Step IV: FIR Band pass filtering on the downsampled data*/
-			int newdatasize = dsLpfData.size();
-			std::vector<double> dsBPFdata;
-			for (int bpfIndex = 0; bpfIndex < dsLpfData.size(); ++bpfIndex) {
-				dsBPFdata.push_back(bpfFilterSamp(dsLpfData[bpfIndex], band, acInfo->bpfState));
-			}
-			/*Step V: calculate Hilbert transform*/
-			int htOutputSamps = dsBPFdata.size();
-			if (htOutput.size() < htOutputSamps)
-			{
-				htOutput.resize(htOutputSamps);
-			}
-			htOutput.resize(htOutputSamps);
-			/*Changes Both real and imaginary part are calculated from the same*/
-			//float* wpOut = buffer.getWritePointer(chan);
-			for (int hilbertIndex = 0; hilbertIndex < htOutputSamps; ++hilbertIndex)
-			{
-				double samp = htFilterSamp(dsBPFdata[hilbertIndex], band, acInfo->htState);
-				double rc = dsBPFdata[hilbertIndex];
-				double ic = htScaleFactor * samp;
-				htOutput.set(hilbertIndex, std::complex<double>(rc, ic));
-				//wpOut[hilbertIndex] = (float)rc;
-			}
-			/*Step VI: Interpolation: No new changes proposed*/
-			int stride = int(floor(float(acInfo->chanInfo.sampleRate) / float(downsampleB))) + 2;
-			float* wpOut = buffer.getWritePointer(chan);
-			float* wpOut2;
-			if (outputMode == PH_AND_MAG)
-			{
-				// second output channel
-				int outChan2 = getNumInputs() + ac;
-				jassert(outChan2 < buffer.getNumChannels());
-				wpOut2 = buffer.getWritePointer(outChan2);
-			}
 
-			double nextComputedPhase, phaseStep;
-			double nextComputedMag, magStep;
-			bool needPhase = outputMode != MAG;
-			bool needMag = outputMode != PH;
+            // filter the data
+            float* const wpIn = buffer.getWritePointer(chan);
+            acInfo->filter.process(nSamples, &wpIn);
 
-			if (needPhase)
-			{
-				nextComputedPhase = LAA(htOutput[0]);//std::arg(htOutput[0]);
-				phaseStep = circDist(nextComputedPhase, acInfo->lastComputedPhase, Dsp::doublePi) / stride;
-			}
-			if (needMag)
-			{
-				nextComputedMag = std::abs(htOutput[0]);
-				magStep = (nextComputedMag - acInfo->lastComputedMag) / stride;
-			}
+            // enqueue as much new data as can fit into history
+            acInfo->history.enqueue(wpIn, nSamples);
 
-			for (int i = 0, frame = 0; i < nSamples; ++i, --acInfo->interpCountdown)
-			{
-				if (acInfo->interpCountdown == 0)
-				{
-					// update interpolation frame
-					++frame;
-					acInfo->interpCountdown = stride;
+            // calc phase and write out (only if AR model has been calculated)
+            if (acInfo->history.isFull() && acInfo->arModeler.hasBeenFit())
+            {
+                // read current AR parameters safely (uses lock internally)
+                acInfo->arModeler.getModel(localARParams);
 
-					if (needPhase)
-					{
-						acInfo->lastComputedPhase = nextComputedPhase;
-						nextComputedPhase = LAA(htOutput[frame]);//std::arg(htOutput[frame]);
-						phaseStep = circDist(nextComputedPhase, acInfo->lastComputedPhase, Dsp::doublePi) / stride;
-					}
-					if (needMag)
-					{
-						acInfo->lastComputedMag = nextComputedMag;
-						nextComputedMag = std::abs(htOutput[frame]);
-						magStep = (nextComputedMag - acInfo->lastComputedMag) / stride;
-					}
-				}
+                // use AR model to fill predSamps (which is downsampled) based on past data.
+                int htDelay = Hilbert::delay[band];
+                int stride = acInfo->chanInfo.dsFactor;
 
-				double thisPhase, thisMag;
-				if (needPhase)
-				{
-					thisPhase = circDist(nextComputedPhase, phaseStep * acInfo->interpCountdown, Dsp::doublePi);
-				}
-				if (needMag)
-				{
-					thisMag = nextComputedMag - magStep * acInfo->interpCountdown;
-				}
+                double* pPredSamps = predSamps.getRawDataPointer();
+                const double* pLocalParam = localARParams.getRawDataPointer();
+                arPredict(acInfo->history, acInfo->interpCountdown, pPredSamps, pLocalParam,
+                    htDelay + 1, stride, arOrder);
 
-				switch (outputMode)
-				{
-				case MAG:
-					wpOut[i] = float(thisMag);
-					break;
+                // identify indices of current buffer to execute HT
+                htInds.clearQuick();
+                for (int i = acInfo->interpCountdown; i < nSamples; i += stride)
+                {
+                    htInds.add(i);
+                }
 
-				case PH_AND_MAG:
-					wpOut2[i] = float(thisMag);
-					// fall through
-				case PH:
-					// output in degrees
-					wpOut[i] = float(thisPhase * (180.0 / Dsp::doublePi));
-					break;
+                int htOutputSamps = htInds.size() + 1;
+                if (htOutput.size() < htOutputSamps)
+                {
+                    htOutput.resize(htOutputSamps);
+                }
 
-				case IM:
-					wpOut[i] = float(thisMag * std::sin(thisPhase));
-					break;
-				}
-			}
-			// unwrapping / smoothing
-			if (outputMode == PH || outputMode == PH_AND_MAG)
-			{
-				unwrapBuffer(wpOut, nSamples, acInfo->lastPhase);
-				smoothBuffer(wpOut, nSamples, acInfo->lastPhase);
-				acInfo->lastPhase = wpOut[nSamples - 1];
-			}
-			// if this is the monitored channel for events, check whether we can add a new phase
-			/*if (hasCanvas && chan == visContinuousChannel && acInfo->history.isFull())
-			{
-				calcVisPhases(acInfo, getTimestamp(chan) + getNumSamples(chan));
-			}*/
+                // execute tranformer on current buffer
+                int kOut = -htDelay;
+                for (int kIn = 0; kIn < htInds.size(); ++kIn, ++kOut)
+                {
+                    double samp = htFilterSamp(wpIn[htInds[kIn]], band, acInfo->htState);
+                    if (kOut >= 0)
+                    {
+                        double rc = wpIn[htInds[kOut]];
+                        double ic = htScaleFactor * samp;
+                        htOutput.set(kOut, std::complex<double>(rc, ic));
+                    }
+                }
 
+                // copy state to transform prediction without changing the end-of-buffer state
+                htTempState = acInfo->htState;
 
+                // execute transformer on prediction
+                for (int i = 0; i <= htDelay; ++i, ++kOut)
+                {
+                    double samp = htFilterSamp(predSamps[i], band, htTempState);
+                    if (kOut >= 0)
+                    {
+                        double rc = i == htDelay ? predSamps[0] : wpIn[htInds[kOut]];
+                        double ic = htScaleFactor * samp;
+                        htOutput.set(kOut, std::complex<double>(rc, ic));
+                    }
+                }
+
+                // output with upsampling (interpolation)
+                float* wpOut = buffer.getWritePointer(chan);
+                float* wpOut2;
+                if (outputMode == PH_AND_MAG)
+                {
+                    // second output channel
+                    int outChan2 = getNumInputs() + ac;
+                    jassert(outChan2 < buffer.getNumChannels());
+                    wpOut2 = buffer.getWritePointer(outChan2);
+                }
+
+                double nextComputedPhase, phaseStep;
+                double nextComputedMag, magStep;
+                bool needPhase = outputMode != MAG;
+                bool needMag = outputMode != PH;
+
+                if (needPhase)
+                {
+                    nextComputedPhase = std::arg(htOutput[0]);
+                    phaseStep = circDist(nextComputedPhase, acInfo->lastComputedPhase, Dsp::doublePi) / stride;
+                }
+                if (needMag)
+                {
+                    nextComputedMag = std::abs(htOutput[0]);
+                    magStep = (nextComputedMag - acInfo->lastComputedMag) / stride;
+                }
+
+                for (int i = 0, frame = 0; i < nSamples; ++i, --acInfo->interpCountdown)
+                {
+                    if (acInfo->interpCountdown == 0)
+                    {
+                        // update interpolation frame
+                        ++frame;
+                        acInfo->interpCountdown = stride;
+
+                        if (needPhase)
+                        {
+                            acInfo->lastComputedPhase = nextComputedPhase;
+                            nextComputedPhase = std::arg(htOutput[frame]);
+                            phaseStep = circDist(nextComputedPhase, acInfo->lastComputedPhase, Dsp::doublePi) / stride;
+                        }
+                        if (needMag)
+                        {
+                            acInfo->lastComputedMag = nextComputedMag;
+                            nextComputedMag = std::abs(htOutput[frame]);
+                            magStep = (nextComputedMag - acInfo->lastComputedMag) / stride;
+                        }
+                    }
+
+                    double thisPhase, thisMag;
+                    if (needPhase)
+                    {
+                        thisPhase = circDist(nextComputedPhase, phaseStep * acInfo->interpCountdown, Dsp::doublePi);
+                    }
+                    if (needMag)
+                    {
+                        thisMag = nextComputedMag - magStep * acInfo->interpCountdown;
+                    }
+
+                    switch (outputMode)
+                    {
+                    case MAG:
+                        wpOut[i] = float(thisMag);
+                        break;
+
+                    case PH_AND_MAG:
+                        wpOut2[i] = float(thisMag);
+                        // fall through
+                    case PH:
+                        // output in degrees
+                        wpOut[i] = float(thisPhase * (180.0 / Dsp::doublePi));
+                        break;
+
+                    case IM:
+                        wpOut[i] = float(thisMag * std::sin(thisPhase));
+                        break;
+                    }
+                }
+
+                // unwrapping / smoothing
+                if (outputMode == PH || outputMode == PH_AND_MAG)
+                {
+                    unwrapBuffer(wpOut, nSamples, acInfo->lastPhase);
+                    smoothBuffer(wpOut, nSamples, acInfo->lastPhase);
+                    acInfo->lastPhase = wpOut[nSamples - 1];
+                }
+            }
+            else // fifo not full or AR model not ready
+            {
+                // just output zeros
+                buffer.clear(chan, 0, nSamples);
+            }
+
+            // if this is the monitored channel for events, check whether we can add a new phase
+            if (hasCanvas && chan == visContinuousChannel && acInfo->history.isFull())
+            {
+                calcVisPhases(acInfo, getTimestamp(chan) + getNumSamples(chan));
+            }
         }
     }
 
@@ -518,7 +558,7 @@ namespace PhaseCalculator
     {
         if (isEnabled)
         {
-            //startThread(arPriority);
+            startThread(arPriority);
 
             // have to manually enable editor, I guess...
             Editor* editor = static_cast<Editor*>(getEditor());
@@ -576,6 +616,34 @@ namespace PhaseCalculator
 
         Array<double> reverseData;
         reverseData.resize(maxHistoryLength);
+
+        uint32 startTime, endTime;
+        while (!threadShouldExit())
+        {
+            startTime = Time::getMillisecondCounter();
+
+            for (auto acInfo : activeChans)
+            {
+                if (!acInfo->history.isFull())
+                {
+                    continue;
+                }
+
+                // unwrap reversed history and add to temporary data array
+                double* dataPtr = reverseData.getRawDataPointer();
+                acInfo->history.unwrapAndCopy(dataPtr, true);
+
+                // calculate parameters
+                acInfo->arModeler.fitModel(reverseData);
+            }
+
+            endTime = Time::getMillisecondCounter();
+            int remainingInterval = calcInterval - (endTime - startTime);
+            if (remainingInterval >= 10) // avoid WaitForSingleObject
+            {
+                sleep(remainingInterval);
+            }
+        }
     }
 
     void Node::updateSettings()
@@ -657,16 +725,10 @@ namespace PhaseCalculator
         return int(getProcessorFullId(sourceNodeId, subProcessorIdx));
     }
 
-	// Added by Sumedh to access private variables
-	int Node::getLpfOrder() const
-	{
-		return lpforder;
-	}
-
-	int Node::getBpfOrder() const
-	{
-		return bpforder;
-	}
+    int Node::getAROrder() const
+    {
+        return arOrder;
+    }
 
     float Node::getHighCut() const
     {
@@ -779,10 +841,71 @@ namespace PhaseCalculator
         const Array<float>& defaultBand = Hilbert::defaultBand[band];
         lowCut = defaultBand[0];
         highCut = defaultBand[1];
+
+        auto editor = static_cast<Editor*>(getEditor());
+        if (editor)
+        {
+            editor->refreshLowCut();
+            editor->refreshHighCut();
+        }
+
         updateScaleFactor();
         updateActiveChannels();
     }
 
+    void Node::setLowCut(float newLowCut)
+    {
+        if (newLowCut == lowCut) { return; }
+
+        auto editor = static_cast<Editor*>(getEditor());
+        const Array<float>& validBand = Hilbert::validBand[band];
+
+        if (newLowCut < validBand[0] || newLowCut >= validBand[1])
+        {
+            // invalid; don't set parameter and reset editor
+            editor->refreshLowCut();
+            CoreServices::sendStatusMessage("Low cut outside valid band of selected filter.");
+            return;
+        }
+
+        lowCut = newLowCut;
+        if (lowCut >= highCut)
+        {
+            // push highCut up
+            highCut = jmin(lowCut + passbandEps, validBand[1]);
+            editor->refreshHighCut();
+        }
+
+        updateScaleFactor();
+        updateActiveChannels();
+    }
+
+    void Node::setHighCut(float newHighCut)
+    {
+        if (newHighCut == highCut) { return; }
+
+        auto editor = static_cast<Editor*>(getEditor());
+        const Array<float>& validBand = Hilbert::validBand[band];
+
+        if (newHighCut <= validBand[0] || newHighCut > validBand[1])
+        {
+            // invalid; don't set parameter and reset editor
+            editor->refreshHighCut();
+            CoreServices::sendStatusMessage("High cut outside valid band of selected filter.");
+            return;
+        }
+
+        highCut = newHighCut;
+        if (highCut <= lowCut)
+        {
+            // push lowCut down
+            lowCut = jmax(highCut - passbandEps, validBand[0]);
+            editor->refreshLowCut();
+        }
+
+        updateScaleFactor();
+        updateActiveChannels();
+    }
 
     void Node::setVisContChan(int newChan)
     {
@@ -815,7 +938,7 @@ namespace PhaseCalculator
 
     void Node::updateScaleFactor()
     {
-        htScaleFactor = getScaleFactor(THETA, 4.0, 8.0);
+        htScaleFactor = getScaleFactor(band, lowCut, highCut);
     }
 
     void Node::unwrapBuffer(float* wp, int nSamples, float lastPhase)
@@ -1064,7 +1187,7 @@ namespace PhaseCalculator
             acInfo->reverseFilter.reset();
             acInfo->reverseFilter.process(hilbertLength, &wpHilbert);
 
-             //un-reverse values
+            // un-reverse values
             acInfo->visHilbertBuffer.reverseReal(hilbertLength);
 
             // Hilbert transform!
@@ -1143,6 +1266,29 @@ namespace PhaseCalculator
         channelInfo.getUnchecked(chan)->deactivate();
     }
 
+    void Node::arPredict(const ReverseStack& history, int interpCountdown, double* prediction,
+        const double* params, int samps, int stride, int order)
+    {
+        const double* rpHistory = history.begin();
+        int histSize = history.size();
+        int histStart = history.getHeadOffset() + stride - interpCountdown;
+
+        // s = index to write output
+        for (int s = 0; s < samps; ++s)
+        {
+            prediction[s] = 0;
+
+            // p = which AR param we are on
+            for (int p = 0; p < order; ++p)
+            {
+                double pastSamp = p < s
+                    ? prediction[s - 1 - p]
+                    : rpHistory[(histStart + (p - s) * stride) % histSize];
+
+                prediction[s] -= params[p] * pastSamp;
+            }
+        }
+    }
 
     double Node::getScaleFactor(Band band, double lowCut, double highCut)
     {
@@ -1212,117 +1358,6 @@ namespace PhaseCalculator
         std::memmove(state_p, state_p + 1, order * sizeof(double));
         return sampOut;
     }
-	//Added by Sumedh
-	/*
-	input: gets the current value to be filtered
-	Band: The band that needs to be filtered, actually this is identified with Matlab function
-	state: the bandpass filter states needs to keep track of the data
-	Steps
-		1) move the memory and add the input at the 0
-		2) std::multiplies state * coefficient
-		3) sum the entire states
-		4) return the sum
-	*/
-	double Node::lpfFilterSamp(double input, Band band, Array<double>& state)
-	{
-		double* state_p = state.getRawDataPointer();
-		int nCoefs = lowpassfilt::delay[band];
-		/*Considering the entire coefficient*/
-		int order = nCoefs; // considering the current even order
-		//to the right
-		//double temp = state_p[order - 1]; //remember last element
-		for (int i = order - 1; i >= 0; i--)
-		{
-			state_p[i + 1] = state_p[i]; //move all element to the right except last one
-		}
-		state_p[0] = 0.0; //assign remembered value to first element
-		//std::memmove(state_p + 1, state_p, order * sizeof(double));
-		state_p[0] = input;
-		double retValue = 0.0;
-		const double* transf = lowpassfilt::transformer[band].begin();
-		for (int kCoef = 0; kCoef < nCoefs; ++kCoef)
-		{
-			retValue = retValue + state_p[kCoef] * transf[kCoef];
-		}
-
-		return retValue;
-	}
-	/*
-	input: gets the current value to be filtered
-	Band: The band that needs to be filtered, actually this is identified with Matlab function
-	state: the bandpass filter states needs to keep track of the data
-	Steps
-	1) move the memory and add the input at the 0
-	2) std::multiplies state * coefficient
-	3) sum the entire states
-	4) return the sum
-	*/
-	double Node::bpfFilterSamp(double input, Band band, Array<double>& state)
-	{
-		double* state_p = state.getRawDataPointer();
-		int nCoefs = bandpassfilt::delay[band];
-		double retValue = 0.0;
-		int order = nCoefs; // considering the current even order
-		state_p[order - 1] = 0.0;
-		for (int i = order - 1; i >= 0; i--)
-		{
-			state_p[i + 1] = state_p[i]; //move all element to the right except last one
-		}
-		state_p[0] = 0.0; //assign remembered value to first element
-		//std::memmove(state_p + 1, state_p, order-1 * sizeof(double));
-		state_p[0] = input;
-		const double* transf = bandpassfilt::transformer[band].begin();
-		for (int kCoef = 0; kCoef < nCoefs; ++kCoef)
-		{
-			retValue = retValue + state_p[kCoef] * transf[kCoef];
-		}
-		return retValue;
-	}
-	
-	double Node::LAA(std::complex<double> c)
-	{
-		// Hold phase before quantization
-		double q;
-
-		// Determine phase based on octant. See LAA alg details.
-		if (std::abs(c.real()) >= std::abs(c.imag()))
-		{
-			if (c.real() >= 0)
-			{
-				q = (1. / 8.) * (c.imag() / c.real()); // octant 1 and 8
-
-			}
-			else
-			{
-				if (c.imag() >= 0)
-				{
-					q = .5 + (1. / 8.) * (c.imag() / c.real()); // octant 4
-				}
-				else
-				{
-					q = -.5 + (1. / 8.) * (c.imag() / c.real()); // octant 5
-				}
-			}
-		}
-		else
-		{
-			if (c.imag() >= 0)
-			{
-				q = 0.25 - (1. / 8.) * (c.real() / c.imag()); // octant 2 and 3
-			}
-			else
-			{
-				q = -.25 - (1. / 8.) * (c.real() / c.imag()); // octant 6 and 7
-			}
-		}
-
-		// Do quantization on phase (based on bit percision). We are testing 8 bits.
-		double lsb = 1. / pow(2., 8.);
-		double ans = floor(q / lsb) * lsb * 3.14 / 0.5;
-		if (std::isnan(ans))
-			ans = 0.0;
-		return ans;
-	}
 }
 
 
