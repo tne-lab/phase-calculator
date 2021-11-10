@@ -22,7 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <PluginInfo.h>
-#include "ASICPhaseCalculator.h"
+#include "PhaseCalculator.h"
 #include <string>
 #ifdef WIN32
 #include <Windows.h>
@@ -50,7 +50,7 @@ extern "C" EXPORT int getPluginInfo(int index, Plugin::PluginInfo* info)
         info->type = Plugin::PLUGIN_TYPE_PROCESSOR;
         info->processor.name = "ASIC";
         info->processor.type = Plugin::FilterProcessor;
-        info->processor.creator = &(Plugin::createProcessor<ASICPhaseCalculator::Node>);
+        info->processor.creator = &(Plugin::createProcessor<PhaseCalculator::Node>);
         break;
 
     default:
