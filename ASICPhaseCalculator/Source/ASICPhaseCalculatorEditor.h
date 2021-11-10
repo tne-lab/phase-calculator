@@ -27,9 +27,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <sstream>  // string parsing
 #include <VisualizerEditorHeaders.h>
 
-#include "PhaseCalculator.h"
+#include "ASICPhaseCalculator.h"
 
-namespace PhaseCalculator
+namespace ASICPhaseCalculator
 {
     class Editor
         : public VisualizerEditor
@@ -92,7 +92,7 @@ namespace PhaseCalculator
         * If so, it is stored in *out and the control is updated with the parsed input.
         * Otherwise, the control is reset to defaultValue.
         *
-        * In header to make sure specializations not used in PhaseCalculatorEditor.cpp
+        * In header to make sure specializations not used in ASICPhaseCalculatorEditor.cpp
         * are still available to other translation units.
         */
         template<typename Ctrl, typename T>

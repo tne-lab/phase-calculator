@@ -38,7 +38,7 @@ filtered continuous channel at the time of each event onset and adds it to the r
 If the events represent stimulation times, for example, this allows you to monitor the
 accuracy of phase-locked stimulation in real time.
 
-@see GenericProcessor, PhaseCalculatorEditor
+@see GenericProcessor, ASICPhaseCalculatorEditor
 
 */
 
@@ -52,7 +52,7 @@ accuracy of phase-locked stimulation in real time.
 #include "ARModeler.h"     // Autoregressive modeling
 #include "HTransformers.h" // Hilbert transformers & frequency bands
 
-namespace PhaseCalculator
+namespace ASICPhaseCalculator
 {
     // forward declarations
     struct ChannelInfo;
@@ -135,13 +135,16 @@ namespace PhaseCalculator
 		Array<double> bpfState;
 		Array<double> lpfState;
 		Array<double> lpfStateMain;
+		Array<double> htStaterealvalues;
 
         // number of samples until a new non-interpolated output. e.g. if this
         // equals 1 after a buffer is processed, then there is one interpolated
         // sample in the next buffer, and then the second sample will be computed.
         // in range [0, dsFactor).
         int interpCountdown;
-
+		int lpfstartingpoint;
+		int prelpfstartingpoint;
+		bool newHT;
         // last non-interpolated ("computed") transformer output
         double lastComputedPhase;
         double lastComputedMag;
@@ -334,7 +337,10 @@ namespace PhaseCalculator
 		//Added by Sumedh
 		static double bpfFilterSamp(double input, Band band, Array<double>& state);
 		static double lpfFilterSamp(double input, Band band, Array<double>& state);
-		static double lpfFilter(double input, Band band, Array<double>& state);
+		static double lpfFilter(double input, int band, Array<double>& state);
+
+		
+		static double htFilter(double input, Band band, Array<double>& state);
 		// ---- customizable parameters ------
 		// Added by Sumedh
 		// Use LAA to return phase angle in degrees

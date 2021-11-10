@@ -21,10 +21,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 
-#include "PhaseCalculatorCanvas.h"
-#include "PhaseCalculatorEditor.h"
+#include "ASICPhaseCalculatorCanvas.h"
+#include "ASICPhaseCalculatorEditor.h"
 
-namespace PhaseCalculator
+namespace ASICPhaseCalculator
 {
     Canvas::Canvas(Node* pc)
         : processor(pc)

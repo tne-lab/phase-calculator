@@ -24,12 +24,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef PHASE_CALCULATOR_CANVAS_H_INCLUDED
 #define PHASE_CALCULATOR_CANVAS_H_INCLUDED
 
-#include "PhaseCalculator.h"
+#include "ASICPhaseCalculator.h"
 #include <VisualizerWindowHeaders.h>
 #include <set> // std::multiset
 #include <functional>
 
-namespace PhaseCalculator
+namespace ASICPhaseCalculator
 {
     class Canvas;
 

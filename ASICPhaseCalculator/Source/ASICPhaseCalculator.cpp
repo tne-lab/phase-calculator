@@ -24,11 +24,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <cfloat>  // DBL_MAX
 #include <cmath>   // sqrt
 #include <cstring> // memcpy, memmove
+#include <windows.h>
+#include <string.h>
+#include <fstream>
+#include "ASICPhaseCalculator.h"
+#include "ASICPhaseCalculatorEditor.h"
 
-#include "PhaseCalculator.h"
-#include "PhaseCalculatorEditor.h"
-
-namespace PhaseCalculator
+namespace ASICPhaseCalculator
 {
     // ------- constants ------------
 
@@ -160,8 +162,10 @@ namespace PhaseCalculator
 		}
 
         htState.resize(Hilbert::delay[band] * 2 + 1);
+		htStaterealvalues.resize(Hilbert::delay[band]);
 		bpfState.resize(bandpassfilt::delay[band]);
 		lpfState.resize(lowpassfilt::delay[band]);
+		lpfStateMain.resize(31);
         // visualization stuff
         hilbertLengthMultiplier = Hilbert::fs * chanInfo.dsFactor / 1000;
         visHilbertBuffer.resize(visHilbertLengthMs * hilbertLengthMultiplier);
@@ -175,13 +179,19 @@ namespace PhaseCalculator
         filter.reset();
 		//added by sumedh
 		filterlpf.reset();
+		newHT = true;
+		lpfstartingpoint = 0;
+		prelpfstartingpoint = 0;
         FloatVectorOperations::clear(htState.begin(), htState.size());
+		FloatVectorOperations::clear(htStaterealvalues.begin(), htStaterealvalues.size());
 		FloatVectorOperations::clear(bpfState.begin(), bpfState.size());
 		FloatVectorOperations::clear(lpfState.begin(), lpfState.size());
+		FloatVectorOperations::clear(lpfStateMain.begin(), lpfStateMain.size());
         interpCountdown = 0;
         lastComputedPhase = 0;
         lastComputedMag = 0;
         lastPhase = 0;
+		
     }
 
 
@@ -369,36 +379,75 @@ namespace PhaseCalculator
             {
                 continue;
             }
-			int downsampleA = 4000;
+
+
+			int downsampleA = 3000;
 			int downsampleB = 1000;
 			/*Get a pointer to the data wpInput*/
 			float* const wpInput = buffer.getWritePointer(chan);
+			//std::ofstream myfileinput; myfileinput.open("inputdata.txt", std::ofstream::out | std::ofstream::app);
+			//for (int i = 0; i <nSamples; i++)
+			//{
+			//	myfileinput << wpInput[i] << "," << std::endl;
+			//}
+			//myfileinput.close();
 			/*active channel info -> acInfo*/
 			/*Step I: IIR Low pass filter over entire data */
-			acInfo->filterlpf.process(nSamples, &wpInput);
-			std::vector<double> dslpf;
-			int preDSample = int(floor(float(acInfo->chanInfo.sampleRate) / downsampleA));
-			for (int i = 0; i < nSamples; i = i + preDSample) {
-				dslpf.push_back(wpInput[i]);
+			std::vector<double> LPF;
+			
+			for (int i = 0; i < nSamples; i++) {
+				LPF.push_back( lpfFilter(wpInput[i], 10, acInfo->lpfStateMain));
+				
 			}
+
+			//acInfo->filterlpf.process(nSamples, &wpInput);
+
+			std::vector<double> dslpf;
+			//std::ofstream myfilelpfpre; myfilelpfpre.open("LPFdataone.txt", std::ofstream::out | std::ofstream::app);
+			int preDSample = int(ceil(float(acInfo->chanInfo.sampleRate) / downsampleA));
+			int prelpfstartingpoint = acInfo->prelpfstartingpoint;
+			int prelpfjumps = 0;
+			for (int i = prelpfstartingpoint; i < nSamples; i = i + preDSample) {
+				dslpf.push_back(LPF[i]);
+				//myfilelpfpre << LPF[i] << "," << std::endl;
+				prelpfjumps = i;
+			}
+			if (prelpfjumps < nSamples) {
+				acInfo->prelpfstartingpoint = (preDSample+prelpfjumps)- nSamples;
+			}
+			//myfilelpfpre.close();
 			/*Step II: FIR low pass filter from MATLAB*/
 			/*lpf again with the coeff from MATLAB*/
+			
 			std::vector<double> lpfData;
 			for (int lpfIndex = 0; lpfIndex < dslpf.size(); ++lpfIndex) {
 				lpfData.push_back(lpfFilterSamp(dslpf[lpfIndex], band, acInfo->lpfState));
+
+				
 			}
 			/*Step III: Downsampling from 40000K to 1K*/
 			
 			int new_sr_size = downsampleA / downsampleB;// int(floor(float(acInfo->chanInfo.sampleRate) / float(new_sampling_rate)));
 			std::vector<double> dsLpfData;
-			for (int i = 0; i < dslpf.size(); i=i+new_sr_size) {
+			//std::ofstream myfilelpf; myfilelpf.open("LPFdata.txt", std::ofstream::out | std::ofstream::app);
+			int lpfstartingpoint = acInfo->lpfstartingpoint;
+			int lpfjumps = 0;
+			for (int i = lpfstartingpoint; i < dslpf.size(); i=i+new_sr_size) {
 				dsLpfData.push_back(lpfData[i]);
+				//myfilelpf << lpfData[i] << "," << std::endl;
+				lpfjumps = i;
 			}
+			if (lpfjumps < dslpf.size()) {
+				acInfo->lpfstartingpoint = (new_sr_size + lpfjumps) - dslpf.size();  
+			}
+			//myfilelpf.close();
+
 			/*Step IV: FIR Band pass filtering on the downsampled data*/
 			int newdatasize = dsLpfData.size();
 			std::vector<double> dsBPFdata;
 			for (int bpfIndex = 0; bpfIndex < dsLpfData.size(); ++bpfIndex) {
 				dsBPFdata.push_back(bpfFilterSamp(dsLpfData[bpfIndex], band, acInfo->bpfState));
+				
 			}
 			/*Step V: calculate Hilbert transform*/
 			int htOutputSamps = dsBPFdata.size();
@@ -407,18 +456,62 @@ namespace PhaseCalculator
 				htOutput.resize(htOutputSamps);
 			}
 			htOutput.resize(htOutputSamps);
+			//int k = 0;
 			/*Changes Both real and imaginary part are calculated from the same*/
 			//float* wpOut = buffer.getWritePointer(chan);
-			for (int hilbertIndex = 0; hilbertIndex < htOutputSamps; ++hilbertIndex)
+			int kOut = -7;
+			int htdelayadded = 7;
+			for (int hilbertIndex = 0; hilbertIndex < htOutputSamps; ++hilbertIndex, ++kOut)
 			{
-				double samp = htFilterSamp(dsBPFdata[hilbertIndex], band, acInfo->htState);
-				double rc = dsBPFdata[hilbertIndex];
-				double ic = htScaleFactor * samp;
+				double samp = htFilter(dsBPFdata[hilbertIndex], band, acInfo->htState);
+				double rc;
+				if (acInfo->newHT == true && kOut < 0)
+				{
+					rc = 0;
+
+				}
+				else
+					if (acInfo->newHT == true && kOut >= 0)
+					{
+						rc = dsBPFdata[hilbertIndex - htdelayadded];
+					}
+					else
+						if (acInfo->newHT == false && kOut < 0) {
+							rc = acInfo->htStaterealvalues[kOut + htdelayadded];
+						}
+						else if(acInfo->newHT == false && kOut >= 0) {
+							rc = dsBPFdata[hilbertIndex - htdelayadded];
+						}
+				double ic = samp;
 				htOutput.set(hilbertIndex, std::complex<double>(rc, ic));
 				//wpOut[hilbertIndex] = (float)rc;
+		/*		wpOut[k] = ic;
+				k++;*/
 			}
+			double* state_p = (acInfo->htStaterealvalues).getRawDataPointer();
+			for (int i = htdelayadded; i >0 ; --i) {
+				state_p[htdelayadded - i] = dsBPFdata[htOutputSamps - i];
+			}
+			/*std::ofstream myfile; myfile.open("hilbertTransformReal.txt", std::ofstream::out | std::ofstream::app);
+			for (int i = 0; i < htOutput.size(); i++)
+			{
+				myfile << std::real(htOutput[i])<<","<<std::endl;
+			}
+			myfile.close();
+			std::ofstream myfile2; myfile2.open("hilbertTransformImag.txt", std::ofstream::out | std::ofstream::app);
+			for (int i = 0; i < htOutput.size(); i++)
+			{
+				myfile2 << std::imag(htOutput[i]) << "," << std::endl;
+			}
+			myfile2.close();
+			std::ofstream myfile1; myfile1.open("Arctangentphase.txt", std::ofstream::out | std::ofstream::app);
+			for (int i = 0; i < htOutput.size(); i++)
+			{
+				myfile1 << std::arg(htOutput[i]) << "," << std::endl;
+			}
+			myfile1.close();*/
 			/*Step VI: Interpolation: No new changes proposed*/
-			int stride = int(floor(float(acInfo->chanInfo.sampleRate) / float(downsampleB))) + 2;
+			int stride = int(ceil(float(acInfo->chanInfo.sampleRate) / float(downsampleB)))+2;
 			float* wpOut = buffer.getWritePointer(chan);
 			float* wpOut2;
 			if (outputMode == PH_AND_MAG)
@@ -436,7 +529,8 @@ namespace PhaseCalculator
 
 			if (needPhase)
 			{
-				nextComputedPhase = LAA(htOutput[0]);//std::arg(htOutput[0]);
+				nextComputedPhase = std::arg(htOutput[0]);
+				//nextComputedPhase = LAA(htOutput[0]);//std::arg(htOutput[0]);
 				phaseStep = circDist(nextComputedPhase, acInfo->lastComputedPhase, Dsp::doublePi) / stride;
 			}
 			if (needMag)
@@ -456,7 +550,7 @@ namespace PhaseCalculator
 					if (needPhase)
 					{
 						acInfo->lastComputedPhase = nextComputedPhase;
-						nextComputedPhase = LAA(htOutput[frame]);//std::arg(htOutput[frame]);
+						nextComputedPhase = std::arg(htOutput[frame]);
 						phaseStep = circDist(nextComputedPhase, acInfo->lastComputedPhase, Dsp::doublePi) / stride;
 					}
 					if (needMag)
@@ -488,7 +582,7 @@ namespace PhaseCalculator
 					// fall through
 				case PH:
 					// output in degrees
-					wpOut[i] = float(thisPhase * (180.0 / Dsp::doublePi));
+					wpOut[i] = double(thisPhase);
 					break;
 
 				case IM:
@@ -508,8 +602,21 @@ namespace PhaseCalculator
 			{
 				calcVisPhases(acInfo, getTimestamp(chan) + getNumSamples(chan));
 			}*/
-
-
+			for (int i = 0; i < nSamples; i++) {
+				wpOut[i] = wpOut[i] * 57.2958;
+			}
+			//std::ofstream myfileoutput; myfileoutput.open("cppOutputphase.txt", std::ofstream::out | std::ofstream::app);
+			//for (int i = 0; i < nSamples; i++)
+			//{
+			//	
+			//	myfileoutput << wpOut[i] << "," << std::endl;
+			//}
+			//myfileoutput.close();
+			if (acInfo->newHT == true)
+			{
+				//reset after first iteration
+				acInfo->newHT = false;
+			}
         }
     }
 
@@ -1247,6 +1354,32 @@ namespace PhaseCalculator
 
 		return retValue;
 	}
+	double Node::lpfFilter(double input, int band, Array<double>& state)
+	{
+		double* state_p = state.getRawDataPointer();
+		int nCoefs = 31;
+		/*Considering the entire coefficient*/
+		int order = nCoefs; // considering the current even order
+		//to the right
+		//double temp = state_p[order - 1]; //remember last element
+		for (int i = order - 1; i >= 0; i--)
+		{
+			state_p[i + 1] = state_p[i]; //move all element to the right except last one
+		}
+		state_p[0] = 0.0; //assign remembered value to first element
+		//std::memmove(state_p + 1, state_p, order * sizeof(double));
+		state_p[0] = input;
+		double retValue = 0.0;
+		Array<double> transf = Array<double>({
+		-0.00173272639840494,-0.00198748297232062,-0.00242153251168736,-0.00267113412739108,-0.00211925399627538,1.23339961810775e-18,0.00443805687582359,0.0117422605199169,0.0220815503798583,0.0351289228347335,0.0500324747539425,0.0654894059431507,0.0799158415661605,0.0916844398106024,0.0993861724102343,0.102066009823313,0.0993861724102343,0.0916844398106024,0.0799158415661605,0.0654894059431507,0.0500324747539425,0.0351289228347335,0.0220815503798583,0.0117422605199169,0.00443805687582359,1.23339961810775e-18,-0.00211925399627538,-0.00267113412739108,-0.00242153251168736,-0.00198748297232062,-0.00173272639840494 });
+		//const double* transf = lowpassfilt::transformer[band].begin();
+		for (int kCoef = 0; kCoef < nCoefs; ++kCoef)
+		{
+			retValue = retValue + state_p[kCoef] * transf[kCoef];
+		}
+
+		return retValue;
+	}
 	/*
 	input: gets the current value to be filtered
 	Band: The band that needs to be filtered, actually this is identified with Matlab function
@@ -1263,7 +1396,7 @@ namespace PhaseCalculator
 		int nCoefs = bandpassfilt::delay[band];
 		double retValue = 0.0;
 		int order = nCoefs; // considering the current even order
-		state_p[order - 1] = 0.0;
+		/*state_p[order - 1] = 0.0;*/
 		for (int i = order - 1; i >= 0; i--)
 		{
 			state_p[i + 1] = state_p[i]; //move all element to the right except last one
@@ -1278,7 +1411,28 @@ namespace PhaseCalculator
 		}
 		return retValue;
 	}
-	
+	double Node::htFilter(double input, Band band, Array<double>& state)
+	{
+		double* state_p = state.getRawDataPointer();
+		int nCoefs = Hilbert::delay[band];
+		double retValue = 0.0;
+		int order = nCoefs; // considering the current even order
+		state_p[order - 1] = 0.0;
+		for (int i = order - 1; i >= 0; i--)
+		{
+			state_p[i + 1] = state_p[i]; //move all element to the right except last one
+		}
+		state_p[0] = 0.0; //assign remembered value to first element
+		//std::memmove(state_p + 1, state_p, order-1 * sizeof(double));
+		state_p[0] = input;
+		const double* transf = Hilbert::transformer[band].begin();
+		for (int kCoef = 0; kCoef < nCoefs; ++kCoef)
+		{
+			retValue = retValue + state_p[kCoef] * transf[kCoef];
+		}
+		return retValue;
+	}
+
 	double Node::LAA(std::complex<double> c)
 	{
 		// Hold phase before quantization

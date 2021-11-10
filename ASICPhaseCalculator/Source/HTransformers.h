@@ -42,7 +42,7 @@ Defines the Hilbert transformers appropriate to use for each frequency band.
                 again, negated and in reverse order.
 */
 
-namespace PhaseCalculator
+namespace ASICPhaseCalculator
 {
     enum Band
     {
