@@ -58,19 +58,7 @@ namespace PhaseCalculator
     struct ChannelInfo;
     class Node;
 
-    // parameter indices
-    enum Param
-    {
-        RECALC_INTERVAL,
-        AR_ORDER,
-        BAND,
-        LOWCUT,
-        HIGHCUT,
-        OUTPUT_MODE,
-        VIS_E_CHAN,
-        VIS_C_CHAN
-    };
-
+    
     class ReverseStack : public Array<double, CriticalSection>
     {
     public:
@@ -102,7 +90,7 @@ namespace PhaseCalculator
 
     struct ActiveChannelInfo
     {
-        ActiveChannelInfo(const ChannelInfo& cInfo);
+        ActiveChannelInfo(const ChannelInfo* cInfo);
 
         void update();
 
@@ -142,15 +130,59 @@ namespace PhaseCalculator
         FFTWTransformableArray visHilbertBuffer;
         BandpassFilter reverseFilter;
 
-        const ChannelInfo& chanInfo;
+        const ChannelInfo* chanInfo;
+
+        void waitForThreadToExit()
+        {
+            if (bufferResizeThread->isThreadRunning())
+            {
+                bufferResizeThread->waitForThreadToExit(1000);
+            }
+        }
 
     private:
+
+        class BufferResizeThread : public Thread
+        {
+        public:
+            BufferResizeThread(FFTWTransformableArray* buffer_) : Thread("buffer resize"),
+                buffer(buffer_), bufferSize(0)
+            {
+
+            }
+
+            ~BufferResizeThread() { 
+            
+                if (isThreadRunning())
+                {
+                    waitForThreadToExit(5000);
+                }
+            }
+
+            void setSize(int lengthMultiplier)
+            {
+                bufferSize = lengthMultiplier;
+            }
+
+            void run()
+            {
+                buffer->resize(bufferSize);
+            }
+
+        private:
+            FFTWTransformableArray* buffer;
+
+            int bufferSize;
+        };
+
+        std::unique_ptr<BufferResizeThread> bufferResizeThread;
+
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ActiveChannelInfo);
     };
 
     struct ChannelInfo
     {
-        ChannelInfo(const Node& pc, int i);
+        ChannelInfo(const DataStream* ds, int i);
 
         void update();
 
@@ -170,136 +202,26 @@ namespace PhaseCalculator
         int dsFactor;
 
         // info for ongoing phase calculation - null if non-active.
-        ScopedPointer<ActiveChannelInfo> acInfo;
-        const Node& owner;
+        std::unique_ptr<ActiveChannelInfo> acInfo;
+        const DataStream* stream;
 
     private:
+
+        bool isActivated; 
+
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ChannelInfo);
     };
 
-    // Output mode - corresponds to itemIDs on the ComboBox
-    enum OutputMode { PH = 1, MAG, PH_AND_MAG, IM };
 
-    class Node : public GenericProcessor, public Thread
+    class Settings
     {
-        friend class Editor;
     public:
+        Settings();
 
-        Node();
-        ~Node();
-
-        bool hasEditor() const override;
-
-        AudioProcessorEditor* createEditor() override;
-
-        void createEventChannels() override;
-
-        void setParameter(int parameterIndex, float newValue) override;
-
-        void process(AudioSampleBuffer& buffer) override;
-
-        bool enable() override;
-        bool disable() override;
-
-        // thread code - recalculates AR parameters.
-        void run() override;
-
-        // handle changing number of channels
-        void updateSettings() override;
+        ~Settings() { }
 
         // Returns array of active channels that only includes inputs (not extra outputs)
         Array<int> getActiveInputs() const;
-
-        // ----- to create new channels for multiple outputs -------
-        bool isGeneratesTimestamps() const override;
-        int getNumSubProcessors() const override;
-        float getSampleRate(int subProcessorIdx = 0) const override;
-        float getBitVolts(int subProcessorIdx = 0) const override;
-
-        // miscellaneous helper
-        int getFullSourceId(int chan);
-
-        // getters
-        int getAROrder() const;
-        float getHighCut() const;
-        float getLowCut() const;
-        Band getBand() const;
-
-        // reads from the visPhaseBuffer if it can acquire a TryLock. returns true if successful.
-        bool tryToReadVisPhases(std::queue<double>& other);
-
-        // for visualizer continuous channel
-        void saveCustomChannelParametersToXml(XmlElement* channelElement, int channelNumber, InfoObjectCommon::InfoObjectType channelType) override;
-        void loadCustomChannelParametersFromXml(XmlElement* channelElement, InfoObjectCommon::InfoObjectType channelType) override;
-
-        /*
-        * Circular distance between angles x and ref (in radians). The "cutoff" is the maximum
-        * possible positive output; greater differences will be wrapped to negative angles.
-        * For interpolation, and also RosePlot visualization.
-        */
-        static double circDist(double x, double ref, double cutoff = 2 * Dsp::doublePi);
-
-    private:
-
-        // ---- methods ----
-
-        // Allow responding to stim events if a stimEventChannel is selected.
-        void handleEvent(const EventChannel* eventInfo, const MidiMessage& event,
-            int samplePosition = 0) override;
-
-        // Sets frequency band (which resets lowCut and highCut to defaults for this band)
-        void setBand(Band newBand, bool force = false);
-
-        // Resets lowCut and highCut to defaults for the current band
-        void resetCutsToDefaults();
-
-        // Sets lowCut (which in turn influences highCut)
-        void setLowCut(float newLowCut);
-
-        // Sets highCut (which in turn influences lowCut)
-        void setHighCut(float newHighCut);
-
-        // Sets visContinuousChannel and updates the visualization filter
-        void setVisContChan(int newChan);
-
-        // Update the htScaleFactor depending on the lowCut and highCut of the filter.
-        void updateScaleFactor();
-
-        // Do glitch unwrapping
-        void unwrapBuffer(float* wp, int nSamples, float lastPhase);
-
-        // Do start-of-buffer smoothing
-        void smoothBuffer(float* wp, int nSamples, float lastPhase);
-
-        // Update subProcessorMap
-        void updateSubProcessorMap();
-
-        // Create an extra output channel for each processed input channel if PH_AND_MAG is selected
-        void updateExtraChannels();
-
-        // Deselect given channel in the "PARAMS" channel selector. Useful to ensure "extra channels"
-        // remain deselected (so that they don't become active inputs if the # of inputs changes).
-        // If "warn" is true, sends a warning that the channel was deselected due to incompatible
-        // sample rate.
-        void deselectChannel(int chan, bool warn);
-
-        // Calls deselectChannel on each channel that is not currently an input. Only relevant
-        // when the output mode is phase and magnitude.
-        void deselectAllExtraChannels();
-
-        /*
-        * Check the visualization timestamp queue, clear any that are expired
-        * (too late to calculate phase), and calculate phase of any that are ready.
-        * sdbEndTs = timestamp 1 past end of current buffer
-        * Precondition: chan is a valid input index.
-        */
-        void calcVisPhases(ActiveChannelInfo* acInfo, juce::int64 sdbEndTs);
-
-        /*
-        * Convenience method to call "update" on all channel info objects (which also updates
-        * corresponding active channel info)
-        */
-        void updateAllChannels();
 
         /*
         * Convenience method to call "update" on all active channel info structs in the map.
@@ -315,6 +237,128 @@ namespace PhaseCalculator
 
         void deactivateInputChannel(int chan);
 
+        // Sets frequency band (which resets lowCut and highCut to defaults for this band)
+        void setBand(Band newBand, bool force = false);
+
+        // Resets lowCut and highCut to defaults for the current band
+        void resetCutsToDefaults();
+
+        // Update the htScaleFactor depending on the lowCut and highCut of the filter.
+        void updateScaleFactor();
+
+         // Get the htScaleFactor for the given band's Hilbert transformer,
+        // over the range from lowCut and highCut. This is the reciprocal of the geometric
+        // mean (i.e. mean in decibels) of the maximum and minimum magnitude responses over the range.
+        static double getScaleFactor(Band band, double lowCut, double highCut);
+
+        // approximate multiplier for the imaginary component output of the HT (depends on filter band)
+        double htScaleFactor;
+
+        OwnedArray<ChannelInfo> channelInfo;
+
+        // ---- customizable parameters ------
+
+        // time to wait between AR model recalculations in ms
+        int calcInterval;
+
+        // order of the AR model
+        int arOrder;
+
+        // frequency band (determines which Hilbert transformer to use)
+        Band band;
+
+        // filter passband
+        float highCut;
+        float lowCut;
+
+        // event channel to watch for phases to plot on the canvas (-1 = none)
+        int visEventChannel;
+
+        // channel to calculate phases from at received stim event times
+        int visContinuousChannel;
+
+        Array<double> predSamps;
+        Array<double> htTempState;
+    };
+
+    class Node : public GenericProcessor, public Thread
+    {
+        friend class Editor;
+    public:
+
+        /** Constructor */
+        Node();
+
+        /** Destructor */
+        ~Node() { }
+
+        /** Creates the PhaseCalculatorEditor */
+        AudioProcessorEditor* createEditor() override;
+
+        /** 
+            Overwrites a subset of channels with the instantaneous phase in a given
+            frequency band.
+         */
+        void process(AudioBuffer<float>& buffer) override;
+
+        /** Starts phase calculation thread */
+        bool startAcquisition() override;
+
+        /** Stops phase calculation code */
+        bool stopAcquisition() override;
+
+        /** thread code - recalculates AR parameters. */
+        void run() override;
+
+        /** Called whenever inputs are changed  */
+        void updateSettings() override;
+
+        /** Called whenever a parameter's value is changed (called by GenericProcessor::setParameter())*/
+        void parameterValueChanged(Parameter* param) override;
+
+        /** reads from the visPhaseBuffer if it can acquire a TryLock. returns true if successful. */
+        bool tryToReadVisPhases(std::queue<double>& other);
+
+        /** Returns array of active channels that only includes inputs (not extra outputs) */
+        Array<int> getActiveChannels();
+
+        /*
+        * Circular distance between angles x and ref (in radians). The "cutoff" is the maximum
+        * possible positive output; greater differences will be wrapped to negative angles.
+        * For interpolation, and also RosePlot visualization.
+        */
+        static double circDist(double x, double ref, double cutoff = 2 * Dsp::doublePi);
+
+        /** Get the current selected stream */
+        juce::uint16 getSelectedStream() { return selectedStream; }
+
+        /** Set the current selected stream */
+        void setSelectedStream(juce::uint16 streamId);
+
+    private:
+
+        // ---- methods ----
+
+        /** Responds to incoming events if a stimEventChannel is selected. */
+        void handleTTLEvent(TTLEventPtr event) override;
+
+        /** Perform glitch unwrapping */
+        void unwrapBuffer(float* wp, int nSamples, float lastPhase);
+
+        /** Do start-of-buffer smoothing */
+        void smoothBuffer(float* wp, int nSamples, float lastPhase);
+
+        /*
+        * Check the visualization timestamp queue, clear any that are expired
+        * (too late to calculate phase), and calculate phase of any that are ready.
+        * sdbEndTs = timestamp 1 past end of current buffer
+        * Precondition: chan is a valid input index.
+        */
+        void calcVisPhases(ActiveChannelInfo* acInfo, juce::int64 sdbEndTs);
+
+        /** Sets visContinuousChannel and updates the visualization filter */
+        void setVisContChan(int newChan);
+        
         // ---- static utility methods ----
 
         /*
@@ -331,54 +375,21 @@ namespace PhaseCalculator
         static void arPredict(const ReverseStack& history, int interpCountdown, double* prediction,
             const double* params, int samps, int stride, int order);
 
-        // Get the htScaleFactor for the given band's Hilbert transformer,
-        // over the range from lowCut and highCut. This is the reciprocal of the geometric
-        // mean (i.e. mean in decibels) of the maximum and minimum magnitude responses over the range.
-        static double getScaleFactor(Band band, double lowCut, double highCut);
 
-        // Execute the hilbert transformer on one sample and update the state.
+        /** Execute the hilbert transformer on one sample and update the state. */
         static double htFilterSamp(double input, Band band, Array<double>& state);
-
-        // ---- customizable parameters ------
-
-        // time to wait between AR model recalculations in ms
-        int calcInterval;
-
-        // order of the AR model
-        int arOrder;
-
-        OutputMode outputMode;
-
-        // frequency band (determines which Hilbert transformer to use)
-        Band band;
-
-        // filter passband
-        float highCut;
-        float lowCut;
-
-        // event channel to watch for phases to plot on the canvas (-1 = none)
-        int visEventChannel;
-
-        // channel to calculate phases from at received stim event times
-        int visContinuousChannel;
 
         // ---- internals -------
 
-        OwnedArray<ChannelInfo> channelInfo;
+        StreamSettings<Settings> settings;
+
+        /** Only one stream can be activated at a time*/
+        uint16 selectedStream;
 
         // storage areas
         Array<double, CriticalSection> localARParams;
-        Array<double> predSamps;
-        Array<double> htTempState;
         Array<int> htInds;
         Array<std::complex<double>> htOutput;
-
-        // approximate multiplier for the imaginary component output of the HT (depends on filter band)
-        double htScaleFactor;
-
-        // maps full source subprocessor IDs of incoming streams to indices of
-        // corresponding subprocessors created here.
-        HashMap<int, uint16> subProcessorMap;
 
         // delayed analysis for visualization
 
@@ -389,8 +400,9 @@ namespace PhaseCalculator
         std::queue<double> visPhaseBuffer;
         CriticalSection visPhaseBufferCS;  // avoid race conditions when updating visualizer
 
-        // event channel to send visualized phases over
-        EventChannel* visPhaseChannel;
+        /** Notify Node thread to update it's list of active channels and find maximum history length */
+        bool activeChansNeedsUpdate;
+
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Node);
     };

@@ -38,21 +38,26 @@ namespace PhaseCalculator
         , public Label::Listener
     {
     public:
+
+        /** Constructor*/
         RosePlot(Canvas* c);
+
+        /** Destructor */
         ~RosePlot();
 
+        /** Draw the plot*/
         void paint(Graphics& g) override;
 
-        // Change number of bins and repaint
+        /** Change number of bins and repaint*/
         void setNumBins(int newNumBins);
 
-        // Change reference angle and repaint
+        /**Change reference angle and repaint*/
         void setReference(double newReference);
 
-        // Add a new angle (in radians) and repaint
+        /** Add a new angle (in radians) and repaint*/
         void addAngle(double newAngle);
 
-        // Remove all angles from the plot and repaint
+        /** Remove all angles from the plot and repaint*/
         void clear();
 
         int getNumAngles();
@@ -120,15 +125,15 @@ namespace PhaseCalculator
         , public Button::Listener
     {
     public:
+
+        /** Constructor */
         Canvas(Node* pc);
+
+        /** Destructor */
         ~Canvas();
         void refreshState() override;
         void update() override;
         void refresh() override;
-        void beginAnimation() override;
-        void endAnimation() override;
-        void setParameter(int, float) override;
-        void setParameter(int, int, int, float) override;
 
         void paint(Graphics& g) override;
         void resized() override;
@@ -148,10 +153,13 @@ namespace PhaseCalculator
         // updates countLabel, meanLabel, and stdLabel
         void updateStatLabels();
 
-        void saveVisualizerParameters(XmlElement* xml) override;
-        void loadVisualizerParameters(XmlElement* xml) override;
+        /** Saves parameters to disk */
+        void saveCustomParametersToXml (XmlElement* xml) override;
 
-        // display updaters - do not trigger listeners.
+        /** Loads parameters from disk */
+        void loadCustomParametersFromXml (XmlElement* xml) override;
+
+        /** Display updaters - do not trigger listeners */
         void displayContinuousChan(int chan);
 
     private:
