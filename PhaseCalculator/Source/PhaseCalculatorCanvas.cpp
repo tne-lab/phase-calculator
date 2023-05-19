@@ -243,6 +243,10 @@ namespace PhaseCalculator
                 tempPhaseBuffer.pop();
             }
         }
+        else
+        {
+            std::cout << "UNEXPECTED: Phase calc canvas failed to read vis phase data from processor" << std::endl;
+        }
     }
 
     void Canvas::beginAnimation()

@@ -550,6 +550,10 @@ namespace PhaseCalculator
             {
                 calcVisPhases(acInfo, getTimestamp(chan) + getNumSamples(chan));
             }
+            else if (chan == visContinuousChannel)
+            {
+                std::cout << "UNEXPECTED: Skipping calculating viz phases on visualization channel. Has canvas: " << hasCanvas << ". Current channel: " << chan << ". History is full?: " << acInfo->history.isFull() << std::endl;
+            }
         }
     }
 
@@ -796,21 +800,41 @@ namespace PhaseCalculator
     void Node::handleEvent(const EventChannel* eventInfo,
         const MidiMessage& event, int samplePosition)
     {
+        std::cout << "OK: Phase calculator received an event of type " << Event::getEventType(event) << ". Expecting type 3 (TTL)" << std::endl;
         if (visEventChannel < 0)
         {
+            std::cout << "UNEXPECTED: Phase calculator event handler returning because event channel is less than 0" << std::endl;
             return;
         }
 
         if (Event::getEventType(event) == EventChannel::TTL)
         {
             TTLEventPtr ttl = TTLEvent::deserializeFromMessage(event, eventInfo);
+            std::cout << "OK: TTL event channel: " << ttl->getChannel() + 1 << ". Timestamp: " << ttl->getTimestamp() << ". State: " << ttl->getState() << ". Viz channel: " << visEventChannel + 1 << std::endl;
             if (ttl->getChannel() == visEventChannel && ttl->getState())
             {
                 // add timestamp to the queue for visualization
                 juce::int64 ts = ttl->getTimestamp();
                 jassert(visTsBuffer.empty() || visTsBuffer.back() <= ts);
+                std::cout << "OK: Sending the event to the rose plot " << std::endl;
                 visTsBuffer.push(ts);
             }
+            else
+            {
+                if (ttl->getChannel() == 0)
+                {
+                    std::cout << "OK (probablay): Received sham event on channel 0. Ignoring" << std::endl;
+                }
+                else
+                {
+                    std::cout << "OK (maybe): Event was skipped because event channel is not the viz channel or TTL state is 0. See previous log statement for values" << std::endl;
+                }
+                
+            }
+        }
+        else 
+        {
+            std::cout << "UNEXPECTED: Skipping event because type was not TTL" << std::endl;
         }
     }
 
@@ -1159,6 +1183,7 @@ namespace PhaseCalculator
     {
         if (acInfo == nullptr)
         {
+            std::cout << "UNEXPECTED: Viz calculator returning because channel info pointer is null" << std::endl;
             jassertfalse;
             return;
         }
@@ -1181,6 +1206,7 @@ namespace PhaseCalculator
             // perform reverse filtering and Hilbert transform
             // don't need to use a lock here since it's the same thread as the one
             // that writes to it.
+            std::cout << "OK: Viz calculator is calculating" << std::endl;
             double* wpHilbert = acInfo->visHilbertBuffer.getRealPointer();
             acInfo->history.unwrapAndCopy(wpHilbert, false);
 
