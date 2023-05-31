@@ -373,6 +373,18 @@ namespace PhaseCalculator
         {
             checkForEvents();
         }
+        else
+        {
+            if (!(visEventChannel > -1))
+            {
+                std::cout << "UNEXPECTED: PC isn't checking for events becasue event channel is negative: " << visEventChannel << std::endl;
+            }
+            else if (!hasCanvas)
+            {
+                std::cout << "UNEXPECTED: PC isn't checking for events becasue canvas doesn't exist: " << std::endl;
+            }
+            
+        }
 
         // iterate over active input channels
         Array<int> activeChans = getActiveInputs();
@@ -549,6 +561,10 @@ namespace PhaseCalculator
             if (hasCanvas && chan == visContinuousChannel && acInfo->history.isFull())
             {
                 calcVisPhases(acInfo, getTimestamp(chan) + getNumSamples(chan));
+            }
+            else if (!acInfo->history.isFull())
+            {
+                std::cout << "OK (maybe): PC skipping phase visualization waiting for history to fill" << std::endl;
             }
             else if (chan == visContinuousChannel)
             {
