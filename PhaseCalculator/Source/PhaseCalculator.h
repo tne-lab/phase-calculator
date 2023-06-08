@@ -52,6 +52,13 @@ accuracy of phase-locked stimulation in real time.
 #include "ARModeler.h"     // Autoregressive modeling
 #include "HTransformers.h" // Hilbert transformers & frequency bands
 
+#include <iostream>
+#include <fstream> // Event log file
+
+#include <iomanip> // Time log
+#include <ctime>
+
+
 namespace PhaseCalculator
 {
     // forward declarations
@@ -391,6 +398,13 @@ namespace PhaseCalculator
 
         // event channel to send visualized phases over
         EventChannel* visPhaseChannel;
+
+        // Log file for debugging events
+        std::ofstream eventLogFile;
+
+        // Quick method to log strings to std out and the log file. Doesn't work with arguments so there are still some double log
+        // statements, but this is a debugging branch
+        void logMessage(String message);
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Node);
     };
