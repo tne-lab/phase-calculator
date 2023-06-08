@@ -258,24 +258,15 @@ namespace PhaseCalculator
         , visEventChannel(-1)
         , visContinuousChannel(-1)
     {
-        eventLogFile.open("event_log.txt", std::ios::out | std::ios::uppercase);
         setProcessorType(PROCESSOR_TYPE_FILTER);
         setBand(ALPHA_THETA, true);
     }
 
-    Node::~Node() {
-        eventLogFile.close();
-    }
+    Node::~Node() {}
 
     bool Node::hasEditor() const
     {
         return true;
-    }
-
-    void Node::logMessage(String message)
-    {
-        std::cout << message << std::endl;
-        eventLogFile << message << std::endl;
     }
 
 
@@ -365,7 +356,6 @@ namespace PhaseCalculator
 
     void Node::process(AudioSampleBuffer& buffer)
     {
-        logMessage("IN process function");
         // handle subprocessors, if any
         HashMap<int, uint16>::Iterator subProcIt(subProcessorMap);
         while (subProcIt.next())
@@ -387,12 +377,11 @@ namespace PhaseCalculator
         {
             if (!(visEventChannel > -1))
             {
-                eventLogFile << "UNEXPECTED: PC isn't checking for events becasue event channel is negative: " << visEventChannel << std::endl;
                 std::cout << "UNEXPECTED: PC isn't checking for events becasue event channel is negative: " << visEventChannel << std::endl;
             }
             else if (!hasCanvas)
             {
-                logMessage("UNEXPECTED: PC isn't checking for events becasue canvas doesn't exist");
+                std::cout << "UNEXPECTED: PC isn't checking for events becasue canvas doesn't exist: " << std::endl;
             }
             
         }
@@ -575,12 +564,11 @@ namespace PhaseCalculator
             }
             else if (!acInfo->history.isFull())
             {
-                logMessage("OK (maybe): PC skipping phase visualization waiting for history to fill");
+                std::cout << "OK (maybe): PC skipping phase visualization waiting for history to fill" << std::endl;
             }
             else if (chan == visContinuousChannel)
             {
                 std::cout << "UNEXPECTED: Skipping calculating viz phases on visualization channel. Has canvas: " << hasCanvas << ". Current channel: " << chan << ". History is full?: " << acInfo->history.isFull() << std::endl;
-                eventLogFile << "UNEXPECTED: Skipping calculating viz phases on visualization channel. Has canvas: " << hasCanvas << ". Current channel: " << chan << ". History is full?: " << acInfo->history.isFull() << std::endl;
             }
         }
     }
@@ -829,11 +817,9 @@ namespace PhaseCalculator
         const MidiMessage& event, int samplePosition)
     {
         std::cout << "OK: Phase calculator received an event of type " << Event::getEventType(event) << ". Expecting type 3 (TTL)" << std::endl;
-        eventLogFile << "OK: Phase calculator received an event of type " << Event::getEventType(event) << ". Expecting type 3 (TTL)" << std::endl;
-
         if (visEventChannel < 0)
         {
-            logMessage("UNEXPECTED: Phase calculator event handler returning because event channel is less than 0");
+            std::cout << "UNEXPECTED: Phase calculator event handler returning because event channel is less than 0" << std::endl;
             return;
         }
 
@@ -841,32 +827,30 @@ namespace PhaseCalculator
         {
             TTLEventPtr ttl = TTLEvent::deserializeFromMessage(event, eventInfo);
             std::cout << "OK: TTL event channel: " << ttl->getChannel() + 1 << ". Timestamp: " << ttl->getTimestamp() << ". State: " << ttl->getState() << ". Viz channel: " << visEventChannel + 1 << std::endl;
-            eventLogFile << "OK: TTL event channel: " << ttl->getChannel() + 1 << ". Timestamp: " << ttl->getTimestamp() << ". State: " << ttl->getState() << ". Viz channel: " << visEventChannel + 1 << std::endl;
-
             if (ttl->getChannel() == visEventChannel && ttl->getState())
             {
                 // add timestamp to the queue for visualization
                 juce::int64 ts = ttl->getTimestamp();
                 jassert(visTsBuffer.empty() || visTsBuffer.back() <= ts);
-                logMessage("OK: Sending the event to the rose plot");
+                std::cout << "OK: Sending the event to the rose plot " << std::endl;
                 visTsBuffer.push(ts);
             }
             else
             {
                 if (ttl->getChannel() == 0)
                 {
-                    logMessage("OK (probablay): Received sham event on channel 0. Ignoring");
+                    std::cout << "OK (probablay): Received sham event on channel 0. Ignoring" << std::endl;
                 }
                 else
                 {
-                    logMessage("OK (maybe): Event was skipped because event channel is not the viz channel or TTL state is 0. See previous log statement for values");
+                    std::cout << "OK (maybe): Event was skipped because event channel is not the viz channel or TTL state is 0. See previous log statement for values" << std::endl;
                 }
                 
             }
         }
         else 
         {
-            logMessage("UNEXPECTED: Skipping event because type was not TTL");
+            std::cout << "UNEXPECTED: Skipping event because type was not TTL" << std::endl;
         }
     }
 
@@ -1215,7 +1199,7 @@ namespace PhaseCalculator
     {
         if (acInfo == nullptr)
         {
-            logMessage("UNEXPECTED: Viz calculator returning because channel info pointer is null");
+            std::cout << "UNEXPECTED: Viz calculator returning because channel info pointer is null" << std::endl;
             jassertfalse;
             return;
         }
@@ -1238,7 +1222,7 @@ namespace PhaseCalculator
             // perform reverse filtering and Hilbert transform
             // don't need to use a lock here since it's the same thread as the one
             // that writes to it.
-            logMessage("OK: Viz calculator is calculating");
+            std::cout << "OK: Viz calculator is calculating" << std::endl;
             double* wpHilbert = acInfo->visHilbertBuffer.getRealPointer();
             acInfo->history.unwrapAndCopy(wpHilbert, false);
 
