@@ -832,7 +832,7 @@ namespace PhaseCalculator
                 // add timestamp to the queue for visualization
                 juce::int64 ts = ttl->getTimestamp();
                 jassert(visTsBuffer.empty() || visTsBuffer.back() <= ts);
-                std::cout << "OK: Sending the event to the rose plot " << std::endl;
+                std::cout << "OK: Sending the event to the rose plot. Timestamp: " << ts << std::endl;
                 visTsBuffer.push(ts);
             }
             else
@@ -1208,8 +1208,12 @@ namespace PhaseCalculator
         int minDelay = visMinDelayMs * acInfo->hilbertLengthMultiplier;
         int hilbertLength = visHilbertLengthMs * acInfo->hilbertLengthMultiplier;
 
+        std::cout << "Max delay" << maxDelay << ", min delay:" << minDelay << ", hilber length" << hilbertLength << std::endl;
+
         juce::int64 minTs = sdbEndTs - maxDelay;
         juce::int64 maxTs = sdbEndTs - minDelay;
+
+        std::cout << "Event ts:" << visTsBuffer.front() << "Min ts:" << minTs << ", max ts:" << maxTs << std::endl;
 
         // discard any timestamps less than minTs
         while (!visTsBuffer.empty() && visTsBuffer.front() < minTs)
