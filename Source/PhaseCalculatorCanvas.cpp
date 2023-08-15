@@ -301,6 +301,10 @@ namespace PhaseCalculator
 
     void Canvas::loadCustomParametersFromXml(XmlElement* xml)
     {
+        if (processor->getSelectedStream() == 0) 
+        {
+            return;
+        }
         for(auto xmlNode : xml->getChildWithTagNameIterator("VISUALIZER"))
         {
             int eventChannelId = xmlNode->getIntAttribute("eventChannelId", eChannelBox->getSelectedId());

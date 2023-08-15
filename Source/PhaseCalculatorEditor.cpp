@@ -37,7 +37,7 @@ namespace PhaseCalculator
         // make the canvas now, so that restoring its parameters always works.
         canvas = std::make_unique<Canvas>(parentNode);
 
-        addComboBoxParameterEditor("freq_range", 10, 30);
+        addComboBoxParameterEditor("freq_range", 10, 25);
 
         addTextBoxParameterEditor("low_cut", filterWidth, 25);
 
@@ -47,8 +47,9 @@ namespace PhaseCalculator
 
         addTextBoxParameterEditor("ar_order", filterWidth + 90, 75);
 
-        addSelectedChannelsParameterEditor("Channels", 10, 90);
+        addSelectedChannelsParameterEditor("Channels", 10, 70);
 
+        addComboBoxParameterEditor("output", 10, 90);
     }
 
     Editor::~Editor() {}

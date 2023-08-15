@@ -212,6 +212,8 @@ namespace PhaseCalculator
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ChannelInfo);
     };
 
+    enum OutputMode { PH = 0, MAG, PH_AND_MAG, IM, NUM_OUTPUT_MODES };
+
 
     class Settings
     {
@@ -239,6 +241,7 @@ namespace PhaseCalculator
 
         // Sets frequency band (which resets lowCut and highCut to defaults for this band)
         void setBand(Band newBand, bool force = false);
+
 
         // Resets lowCut and highCut to defaults for the current band
         void resetCutsToDefaults();
@@ -277,9 +280,18 @@ namespace PhaseCalculator
         // channel to calculate phases from at received stim event times
         int visContinuousChannel;
 
+        int visPhaseChannel;
+
+        // event channel to send visualized phases over. Commonly paired with crossing detector
+        EventChannel* visPhaseChannelPtr;
+
         Array<double> predSamps;
         Array<double> htTempState;
+
+        OutputMode outputMode;
     };
+
+    
 
     class Node : public GenericProcessor, public Thread
     {
@@ -315,6 +327,12 @@ namespace PhaseCalculator
 
         /** Called whenever a parameter's value is changed (called by GenericProcessor::setParameter())*/
         void parameterValueChanged(Parameter* param) override;
+
+        /** Called by parameterValueChanged and updateSettings. Adds a bool param for whether to call 
+            CoreServices::updateSignalChain. 
+            This is necessary when adding extra channels to avoid an infinite settings update loop
+        */
+        void parameterValueChangedWithSignalChainUpdate(Parameter* param, bool updateSignalChain);
 
         /** reads from the visPhaseBuffer if it can acquire a TryLock. returns true if successful. */
         bool tryToReadVisPhases(std::queue<double>& other);
@@ -354,7 +372,7 @@ namespace PhaseCalculator
         * sdbEndTs = timestamp 1 past end of current buffer
         * Precondition: chan is a valid input index.
         */
-        void calcVisPhases(ActiveChannelInfo* acInfo, juce::int64 sdbEndTs);
+        void calcVisPhases(ActiveChannelInfo* acInfo, juce::int64 sdbEndTs, juce::uint16 selectedStreamId);
 
         /** Sets visContinuousChannel and updates the visualization filter */
         void setVisContChan(int newChan);
@@ -378,6 +396,9 @@ namespace PhaseCalculator
 
         /** Execute the hilbert transformer on one sample and update the state. */
         static double htFilterSamp(double input, Band band, Array<double>& state);
+
+        // Used to add MAG channel when output mode is PHASE_AND_MAG
+        void updateExtraChannels();
 
         // ---- internals -------
 

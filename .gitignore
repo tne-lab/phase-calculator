@@ -7,3 +7,6 @@
 
 # 2. Build files
 Build/*
+
+# 3. VS project files
+.vs/*
