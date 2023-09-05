@@ -257,6 +257,7 @@ namespace PhaseCalculator
         , outputMode(PH)
         , visEventChannel(-1)
         , visContinuousChannel(-1)
+        , eventLogger("pc_cpp_events")
     {
         setProcessorType(PROCESSOR_TYPE_FILTER);
         setBand(ALPHA_THETA, true);
@@ -810,6 +811,7 @@ namespace PhaseCalculator
                 juce::int64 ts = ttl->getTimestamp();
                 jassert(visTsBuffer.empty() || visTsBuffer.back() <= ts);
                 visTsBuffer.push(ts);
+                eventLogger.log_event("pc_receive_ttl");
             }
         }
     }

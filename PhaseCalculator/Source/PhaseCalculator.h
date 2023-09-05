@@ -52,6 +52,40 @@ accuracy of phase-locked stimulation in real time.
 #include "ARModeler.h"     // Autoregressive modeling
 #include "HTransformers.h" // Hilbert transformers & frequency bands
 
+
+#include <iostream>
+#include <fstream>
+#include <chrono>
+#include <string>
+#include <iomanip>  // For std::setprecision
+
+
+
+class EventLogger {
+private:
+    std::string filename;
+    std::ofstream file;
+
+public:
+    EventLogger(const std::string& filename) : filename(filename) {
+        file.open(filename, std::ios::out);  // Open in write mode to overwrite
+        file << std::setprecision(15);  // Set high precision for floating-point numbers
+    }
+
+    ~EventLogger() {
+        file.close();
+    }
+
+    double log_event(const std::string& event_name) {
+        auto now = std::chrono::high_resolution_clock::now();
+        auto timestamp = std::chrono::duration<double>(now.time_since_epoch()).count();
+        file << event_name << "," << timestamp << std::endl;
+        file.flush();  // Flush the buffer to write immediately
+        return timestamp;
+    }
+};
+
+
 namespace PhaseCalculator
 {
     // forward declarations
@@ -393,6 +427,8 @@ namespace PhaseCalculator
         EventChannel* visPhaseChannel;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Node);
+
+        EventLogger eventLogger;
     };
 
 }
