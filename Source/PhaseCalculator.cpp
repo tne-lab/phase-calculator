@@ -420,7 +420,7 @@ namespace PhaseCalculator
         activeChansNeedsUpdate = true;
 
         StringArray bands;
-        for (int b = 0; b < NUM_BANDS - 1; ++b)
+        for (int b = 0; b < NUM_BANDS; ++b)
             bands.add(Hilbert::bandName[b]);
 
         addCategoricalParameter(Parameter::STREAM_SCOPE, 
