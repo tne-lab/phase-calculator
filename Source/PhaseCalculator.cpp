@@ -116,10 +116,10 @@ namespace PhaseCalculator
         }
 
         int length = size();
-
+        //__debugbreak();
         const double* block2Start = begin();
         int block2Size = (headOffset + 1) % length;
-
+      //  std::cout << headOffset<< std::endl;
         const double* block1Start = block2Start + block2Size;
         int block1Size = length - block2Size;
 
@@ -133,7 +133,7 @@ namespace PhaseCalculator
         : chanInfo(cInfo)
     {
 
-        bufferResizeThread = std::make_unique<BufferResizeThread>(&visHilbertBuffer);
+       bufferResizeThread = std::make_unique<BufferResizeThread>(&visHilbertBuffer);
 
         update();
     }
@@ -155,7 +155,7 @@ namespace PhaseCalculator
             arOrder + 1,
             1 * Hilbert::fs);
 
-        LOGC("PhaseCalculator: Resetting history size");
+        LOGC("PhaseCalculator: Resetting history size");        
         history.resetAndResize(newHistorySize);
 
         // set filter parameters
@@ -176,7 +176,7 @@ namespace PhaseCalculator
 
         // visualization stuff
         hilbertLengthMultiplier = Hilbert::fs * chanInfo->dsFactor / 1000;
-
+       
         LOGC("PhaseCalculator: Resizing visualization buffer to ", visHilbertLengthMs * hilbertLengthMultiplier);
 
         if (bufferResizeThread->isThreadRunning())
@@ -493,11 +493,11 @@ namespace PhaseCalculator
                     ActiveChannelInfo* acInfo = chanInfo->acInfo.get();
 
                     int chan = stream->getContinuousChannels().getUnchecked(chanInfo->chan)->getGlobalIndex();
-
+                   
                     // filter the data
-                    float* const wpIn = buffer.getWritePointer(chan);
+                    float* const wpIn = buffer.getWritePointer(chan); 
                     acInfo->filter.process(nSamples, &wpIn);
-
+                    
                     // enqueue as much new data as can fit into history
                     acInfo->history.enqueue(wpIn, nSamples);
 
@@ -662,7 +662,7 @@ namespace PhaseCalculator
                         && chanInfo->chan == settings[stream->getStreamId()]->visContinuousChannel
                         && acInfo->history.isFull())
                     {
-                        calcVisPhases(acInfo, getFirstSampleNumberForBlock(stream->getStreamId()), stream->getStreamId());
+                        calcVisPhases(acInfo, getFirstSampleNumberForBlock(stream->getStreamId()) + getNumSamplesInBlock(stream->getStreamId()), stream->getStreamId());
                     }
                 }
             }
@@ -1230,9 +1230,13 @@ namespace PhaseCalculator
             // perform reverse filtering and Hilbert transform
             // don't need to use a lock here since it's the same thread as the one
             // that writes to it.
-            double* wpHilbert = acInfo->visHilbertBuffer.getRealPointer();
-            acInfo->history.unwrapAndCopy(wpHilbert, false);
 
+           // __debugbreak();
+
+            double* wpHilbert = acInfo->visHilbertBuffer.getRealPointer();
+
+            acInfo->history.unwrapAndCopy(wpHilbert,false);
+            
             acInfo->reverseFilter.reset();
             acInfo->reverseFilter.process(hilbertLength, &wpHilbert);
 
@@ -1241,7 +1245,7 @@ namespace PhaseCalculator
 
             // Hilbert transform!
             acInfo->visHilbertBuffer.hilbert();
-
+          
             juce::int64 ts;
             ScopedLock phaseBufferLock(visPhaseBufferCS);
             while (!visTsBuffer.empty() && (ts = visTsBuffer.front()) <= maxTs)
@@ -1262,7 +1266,7 @@ namespace PhaseCalculator
                 MetadataValue* crossingPointVal = new MetadataValue(desc);
                 crossingPointVal->setValue(eventData);
                 mdArray.add(crossingPointVal);
-
+                
                 // Create and send event
                 EventChannel* eventChannel = settings[selectedStreamId]->visPhaseChannelPtr;
                 TTLEventPtr event = TTLEvent::createTTLEvent(eventChannel, eventTs, 0, false, mdArray);
