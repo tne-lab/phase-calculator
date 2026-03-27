@@ -66,8 +66,6 @@ namespace PhaseCalculator
                     -0.00055322197399797961,
                     -0.63685698210351149
                 });
-
-
                 validBand[BETA] = Array<float>({ 10, 40 });
                 bandName[BETA] = beta + validBandToString(validBand[BETA]);
                 defaultBand[BETA] = Array<float>({ 12, 30 });

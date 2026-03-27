@@ -62,18 +62,19 @@ namespace PhaseCalculator
 
         extern const String* const bandName;
 
-        // each is a pair (lower limit, upper limit)
+        /** each is a pair (lower limit, upper limit) */
         extern const Array<float>* const validBand;
 
-        // each is a pair (low cut, high cut)
+        /** each is a pair (low cut, high cut) */
         extern const Array<float>* const defaultBand;
 
+        /** Locations of local extrema of the magnitude response within VALID_BAND*/
         extern const Array<float>* const extrema;
 
-        // samples of group delay (= order of filter / 2)
+        /** Samples of group delay (= order of filter / 2) */
         extern const int* const delay;
 
-        // contain the first delay[band] coefficients; the rest are redundant and can be inferred
+        /** Contains the first delay[band] coefficients; the rest are redundant and can be inferred */
         extern const Array<double>* const transformer;
     }
 }

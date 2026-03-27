@@ -1,0 +1,12 @@
+# Files and folders to ignore
+
+# 1. intermediate files
+*.o
+*.d
+
+
+# 2. Build files
+Build/*
+
+# 3. VS project files
+.vs/*

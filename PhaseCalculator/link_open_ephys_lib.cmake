@@ -9,7 +9,7 @@ function(link_open_ephys_lib target libname)
 
 	# try to find release version first
 	set(LIB_CONFIGS ${CMAKE_CONFIGURATION_TYPES})
-	list(INSERT LIB_CONFIGS 0 Release)
+	list(INSERT LIB_CONFIGS 0 Release Debug) # Linux doesn't populate CMAKE_CONFIGURATION_TYPES  
 	list(REMOVE_DUPLICATES LIB_CONFIGS)
 
 	foreach(config ${LIB_CONFIGS})
