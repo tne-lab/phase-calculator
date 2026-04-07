@@ -27,7 +27,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "PhaseCalculator.h"
 #include "PhaseCalculatorEditor.h"
-#include "C:\Users\saika\Downloads\plugin-GUI\Source\Processors\FileReader\FileReader.h"
 
 namespace PhaseCalculator
 {
