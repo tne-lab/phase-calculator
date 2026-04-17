@@ -1,6 +1,6 @@
 ## Phase Calculator [![DOI](https://zenodo.org/badge/134900173.svg)](https://zenodo.org/badge/latestdoi/134900173)
 
-![phase-calculator-screenshot](Resources/phase-calculator.png)
+![phase-calculator-screenshot](Resources/pc_v1.png)
 
 Estimates the phase of a continuous input signal within a specified passband. It can be used to perform phase-specific closed-loop stimulation, typically in combination with the [Crossing Detector](https://github.com/open-ephys-plugins/crossing-detector).
 
@@ -19,6 +19,27 @@ This plugin can be added via the Open Ephys GUI Plugin Installer. To access the 
 
 * `AR_REFRESH` and `AR_ORDER` control the autoregressive model used to predict the "future" portion of the Hilbert buffer. AR parameters are estimated using Burg's method. The default settings generally work well, but alternate values (particularly a lower order) may improve the estimate in certain cases.
 
+* Click the coefficients field (displays `default`) at the bottom of the plugin to load a custom JSON file containing FIR coefficients for specific bands. Bands not present in the JSON retain their default Matlab-designed coefficients.
+
+  The JSON should follow this format:
+```json
+  {
+    "bands": {
+        "ALPHA_THETA": {
+            "transformer": [
+                -0.28757250783614413,
+                0.000027647225074994485,
+                ...
+            ]
+        }
+        // Add any other bands as needed:
+        // "BETA":        { "transformer": [ ... ] },
+        // "GAMMA":       { "transformer": [ ... ] },
+        // "THETA":       { "transformer": [ ... ] }
+    }
+}
+```
+
 * Clicking the tab or window button opens the "event phase plot" view. This allows non-real-time plotting of the precise phase of received TTL events on a channel of interest. All plot controls can be used while acquisition is running. "Phase reference" subtracts the input (in degrees) from all phases (in both the rose plot and the statistics).
 
 
@@ -26,7 +47,7 @@ This plugin can be added via the Open Ephys GUI Plugin Installer. To access the 
 
 First, follow the instructions on [this page](https://open-ephys.github.io/gui-docs/Developer-Guide/Compiling-the-GUI.html) to build the Open Ephys GUI.
 
-**Important:** This plugin is intended for use with the latest version of the GUI (0.6.0 and higher). The GUI should be compiled from the [`main`](https://github.com/open-ephys/plugin-gui/tree/main) branch, rather than the former `master` branch.
+**Important:** This plugin is intended for use with the latest version of the GUI (1.0 and higher). The GUI should be compiled from the [`main`](https://github.com/open-ephys/plugin-gui/tree/main) branch, rather than the former `master` branch.
 
 Next, install the [OpenEphysFFTW](https://github.com/open-ephys-plugins/OpenEphysFFTW) library.
 
