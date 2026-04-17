@@ -1,6 +1,6 @@
 ## Phase Calculator [![DOI](https://zenodo.org/badge/134900173.svg)](https://zenodo.org/badge/latestdoi/134900173)
 
-![phase-calculator-screenshot](Resources/pc_v1.png)
+![phase-calculator-screenshot](Resources/pc_v1.PNG)
 
 Estimates the phase of a continuous input signal within a specified passband. It can be used to perform phase-specific closed-loop stimulation, typically in combination with the [Crossing Detector](https://github.com/open-ephys-plugins/crossing-detector).
 
@@ -32,13 +32,10 @@ This plugin can be added via the Open Ephys GUI Plugin Installer. To access the 
                 ...
             ]
         }
-        // Add any other bands as needed:
-        // "BETA":        { "transformer": [ ... ] },
-        // "GAMMA":       { "transformer": [ ... ] },
-        // "THETA":       { "transformer": [ ... ] }
     }
 }
 ```
+> Add entries for any of the valid bands following the same format.
 
 * Clicking the tab or window button opens the "event phase plot" view. This allows non-real-time plotting of the precise phase of received TTL events on a channel of interest. All plot controls can be used while acquisition is running. "Phase reference" subtracts the input (in degrees) from all phases (in both the rose plot and the statistics).
 
